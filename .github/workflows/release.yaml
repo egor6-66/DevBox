@@ -1,0 +1,52 @@
+name: Выпуск
+
+# Выпуск публикует ОБРАЗ — в нём всё окружение скоупа. Снаружи у человека остаётся только его
+# `devcontainer.json` с версией образа.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Теги считаются из тега выпуска: полный, минорный, мажорный, `latest`.
+      #
+      # ПРЕДВЫПУСК (`v1.0.0-rc.1`) публикуется ТОЛЬКО полной версией: иначе он подменил бы `1` и
+      # `latest`, то есть прилетел бы тем, кто живёт на стабильном канале и ни о каком rc не просил.
+      # Это правило semver, а не наша осторожность.
+      - name: Теги образа
+        id: tags
+        run: |
+          full="${GITHUB_REF_NAME#v}"
+          name="ghcr.io/${{ github.repository_owner }}/devbox"
+
+          if [ "${full#*-}" != "$full" ]; then
+            echo "list=${name}:${full}" >> "$GITHUB_OUTPUT"
+            echo "[выпуск] предвыпуск ${full}: только полная версия, стабильные теги не двигаются"
+          else
+            echo "list=${name}:${full},${name}:${full%.*},${name}:${full%%.*},${name}:latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Две платформы: на Apple Silicon образ под amd64 поднимается эмуляцией и работает медленно.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.list }}
