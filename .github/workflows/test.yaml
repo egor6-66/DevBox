@@ -15,39 +15,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Собрать образ
-        run: docker build -t devbox:test .
+        run: docker build -t devbox:dev .
 
-      # Команды старта зовут эти инструменты по имени: нет любого из них — контейнер не поднимется.
-      - name: Инструменты старта на месте
-        run: docker run --rm devbox:test sh -c 'for t in mise pnpm jq setsid git; do command -v "$t" >/dev/null || { echo "нет $t"; exit 1; }; done'
-
-      # mise лежит в образе по постоянному пути: шимы в томе — ссылки на него.
-      - name: mise по постоянному пути, шимы первыми в PATH
-        run: |
-          docker run --rm devbox:test sh -c 'test -x /usr/local/bin/mise'
-          docker run --rm devbox:test sh -c 'case "$PATH" in /home/node/.tools/mise/shims:*) ;; *) echo "$PATH"; exit 1;; esac'
-
-      # Пустой том docker наполняет правами каталога, на который его смонтировали: каталог не
-      # принадлежит пользователю — первая же запись отказывает.
-      - name: Точки монтирования принадлежат пользователю
-        run: docker run --rm devbox:test sh -c 'for d in /home/node/.secrets /home/node/.tools /home/node/.pnpm-store /workspaces/tree; do [ "$(stat -c %U "$d")" = node ] || { echo "$d"; exit 1; }; done'
-
-      - name: Пути к конфигам скоупа названы
-        run: |
-          docker run --rm devbox:test sh -c '[ "$MISE_GLOBAL_CONFIG_FILE" = /workspaces/tree/.devbox/mise.toml ]'
-          docker run --rm devbox:test sh -c '[ "$MANI_CONFIG" = /workspaces/tree/.devbox/mani.yaml ]'
-          docker run --rm devbox:test sh -c '[ "$FNOX_CONFIG_DIR" = /workspaces/tree/.devbox/fnox ]'
-          docker run --rm devbox:test sh -c '[ "$FNOX_AGE_KEY_FILE" = /home/node/.secrets/age.txt ]'
-
-      # Описание общей установки pnpm стоит этажом выше скоупа и ведёт в его конфиг.
-      - name: Ссылка для связки соседей на месте
-        run: docker run --rm devbox:test sh -c '[ "$(readlink /workspaces/pnpm-workspace.yaml)" = /workspaces/tree/.devbox/pnpm-workspace.yaml ]'
-
-      # Метку читает редактор: битый JSON или пропавшая команда — и среда молча не поднимается.
-      - name: Метка образа — команды старта и пользователь
-        run: |
-          meta="$(docker image inspect devbox:test --format '{{ index .Config.Labels "devcontainer.metadata" }}')"
-          echo "$meta" | jq -e '.[0].remoteUser == "node" and .[0].containerUser == "node"'
-          echo "$meta" | jq -e '.[0].postCreateCommand == "mise install"'
-          echo "$meta" | jq -e '.[0].postAttachCommand.repos | contains("mani sync") and contains("mise run bootstrap")'
-          echo "$meta" | jq -e '.[0].postAttachCommand.extensions | contains("--install-extension")'
+      # Сами проверки — в файле: его же гоняют локально перед Rebuild тестового окна.
+      - name: Проверить образ
+        run: sh test/image.sh devbox:dev
