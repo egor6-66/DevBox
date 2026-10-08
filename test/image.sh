@@ -35,9 +35,9 @@ label() {
   fi
 }
 
-# Команды старта зовут эти инструменты по имени: нет любого из них — контейнер не поднимется.
+# Команды старта и `devbox link` зовут эти инструменты по имени.
 inside "инструменты старта на месте" \
-  'for t in mise pnpm jq setsid git; do command -v "$t" >/dev/null || exit 1; done'
+  'for t in mise pnpm jq yq git; do command -v "$t" >/dev/null || exit 1; done'
 
 # mise лежит в образе по постоянному пути: шимы в томе — ссылки на него.
 inside "mise по постоянному пути" 'test -x /usr/local/bin/mise'
@@ -53,6 +53,9 @@ inside "путь к конфигу mani" '[ "$MANI_CONFIG" = /workspaces/tree/.d
 inside "путь к конфигу fnox" '[ "$FNOX_CONFIG_DIR" = /workspaces/tree/.devbox/fnox ]'
 inside "путь к ключу age" '[ "$FNOX_AGE_KEY_FILE" = /home/node/.secrets/age.txt ]'
 
+# Докачка навыков ходит в GitHub мимо сервера версий и при исчерпанном лимите валит весь старт.
+inside "докачка навыков mise выключена" '[ "$(mise settings get skills.fetch 2>/dev/null)" = false ]'
+
 # Ручной линк на пакеты соседа: команда девбокса и разборщик её конфига.
 inside "команда devbox и yq на месте" 'command -v yq >/dev/null && devbox --help | grep -q "devbox unlink"'
 inside "devbox без конфига линков говорит об этом, а не падает молча" \
@@ -62,11 +65,10 @@ inside "devbox без конфига линков говорит об этом, 
 meta="$($docker image inspect "$image" --format '{{ index .Config.Labels "devcontainer.metadata" }}' 2>/dev/null)"
 label "метка: пользователь node" '.[0].remoteUser == "node" and .[0].containerUser == "node"'
 label "метка: при создании — mise install" '.[0].postCreateCommand == "mise install"'
-label "метка: при подключении — репозитории, расширения, bootstrap" \
-  '.[0].postAttachCommand | contains("mani sync") and contains("--install-extension") and contains("mise run bootstrap")'
-# Расширение, вставшее раньше репозиториев, осматривает пустые папки.
-label "метка: расширения ставятся после клонирования" \
-  '.[0].postAttachCommand | index("mani sync") < index("--install-extension")'
+# При подключении образ делает одно — приводит репозитории к конфигу. Расширения ставит редактор по
+# списку из devcontainer.json человека, библиотеки и свои скрипты запускает человек.
+label "метка: при подключении — только репозитории" \
+  '.[0].postAttachCommand == "mani sync --sync-gitignore=false --sync-remotes"'
 
 if [ "$failed" -ne 0 ]; then
   echo "[проверки] образ $image не прошёл"
