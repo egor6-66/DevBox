@@ -89,6 +89,10 @@ RUN mkdir -p /home/node/.secrets /home/node/.tools /home/node/.pnpm-store /works
 # 2026-10-07). Именно здесь, а не при создании: закрытым репозиториям нужен логин, а его в
 # контейнер передаёт редактор.
 #
+# Нет `mani.yaml` — шаг пропускается, а не падает: на новом, ещё пустом скоупе нет ни конфига, ни
+# самого mani (его ставит mise по `mise.toml`), и первый же запуск показывал бы человеку ошибку
+# раньше, чем он успел что-то положить.
+#
 # Больше образ при старте не делает ничего, и это намеренно.
 #  · РАСШИРЕНИЯ ставит сам редактор по списку из `devcontainer.json` человека
 #    (`customizations.vscode.extensions`) — это его родной способ. Ставить их отсюда, по списку из
@@ -107,5 +111,5 @@ LABEL devcontainer.metadata='[{ \
   "remoteUser": "node", \
   "customizations": { "vscode": { "extensions": ["/usr/local/share/devbox/devbox.vsix"] } }, \
   "postCreateCommand": "mise install", \
-  "postAttachCommand": "mani sync --sync-gitignore=false --sync-remotes" \
+  "postAttachCommand": "test ! -f \"$MANI_CONFIG\" || mani sync --sync-gitignore=false --sync-remotes" \
 }]'

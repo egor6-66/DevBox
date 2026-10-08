@@ -77,8 +77,12 @@ label "метка: редактору названо расширение дев
 
 # При подключении образ делает одно — приводит репозитории к конфигу. Расширения ставит редактор по
 # списку из devcontainer.json человека, библиотеки и свои скрипты запускает человек.
-label "метка: при подключении — только репозитории" \
-  '.[0].postAttachCommand == "mani sync --sync-gitignore=false --sync-remotes"'
+label "метка: при подключении — только репозитории, и только если есть их конфиг" \
+  '.[0].postAttachCommand == "test ! -f \"$MANI_CONFIG\" || mani sync --sync-gitignore=false --sync-remotes"'
+
+# Новый скоуп пуст: ни конфигов, ни инструментов. Обе команды старта обязаны пройти и на нём.
+inside "пустой скоуп: команды старта проходят без ошибок" \
+  'cd /workspaces/tree && mise install >/dev/null 2>&1 && { test ! -f "$MANI_CONFIG" || mani sync --sync-gitignore=false --sync-remotes; }'
 
 if [ "$failed" -ne 0 ]; then
   echo "[проверки] образ $image не прошёл"
