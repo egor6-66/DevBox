@@ -56,6 +56,11 @@ inside "путь к ключу age" '[ "$FNOX_AGE_KEY_FILE" = /home/node/.secret
 # Докачка навыков ходит в GitHub мимо сервера версий и при исчерпанном лимите валит весь старт.
 inside "докачка навыков mise выключена" '[ "$(mise settings get skills.fetch 2>/dev/null)" = false ]'
 
+# Браузера в образе нет — он по выбору, фичей. Но флаг, без которого он в контейнере не стартует,
+# лежит заранее в папке флагов его запускалки.
+inside "браузера в образе нет, флаг для него на месте" \
+  '! command -v chromium >/dev/null && grep -q -- "--no-sandbox" /etc/chromium.d/devbox-no-sandbox'
+
 # Ручной линк на пакеты соседа: команда девбокса и разборщик её конфига.
 inside "команда devbox и yq на месте" 'command -v yq >/dev/null && devbox --help | grep -q "devbox unlink"'
 inside "devbox без конфига линков говорит об этом, а не падает молча" \

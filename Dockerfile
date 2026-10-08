@@ -20,6 +20,13 @@ RUN curl -fsSL "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/
 COPY bin/devbox /usr/local/bin/devbox
 RUN chmod +x /usr/local/bin/devbox
 
+# Браузера в образе НЕТ: его ставит фичей тот, кому он нужен (`devcontainer.json`, apt-пакет
+# chromium) — так он по выбору, а образ остаётся лёгким. Здесь только флаг для него: в контейнере
+# Chromium без `--no-sandbox` не стартует («No usable sandbox»), пакет `chromium-sandbox` не
+# помогает (браузер падает), а переменную окружения его запускалка сбрасывает — проверено
+# 2026-10-08. Остаётся её же папка флагов.
+COPY etc/chromium.d/devbox-no-sandbox /etc/chromium.d/devbox-no-sandbox
+
 # Креды и кэши — ПУТИ, по которым человек монтирует свои тома. Сами тома образ не объявляет.
 ENV CLAUDE_CONFIG_DIR=/home/node/.secrets/claude \
     GIT_CONFIG_GLOBAL=/home/node/.secrets/gitconfig \
