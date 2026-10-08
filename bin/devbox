@@ -1,0 +1,168 @@
+#!/bin/sh
+# Линк приложения на локальные пакеты соседнего репозитория — и обратно.
+#
+#   devbox link [приложение…]      прилинковать, как написано в .devbox/links.yaml
+#   devbox unlink [приложение…]    вернуть приложение как было
+#
+# Без имён — все приложения из конфига. При старте контейнера ничего из этого не запускается:
+# линк — ручное временное действие на время правки пакета.
+#
+# Что делает link: дописывает в `pnpm-workspace.yaml` ПРИЛОЖЕНИЯ блок `overrides` со ссылками на
+# папки пакетов соседа и запускает его `pnpm install` — то же, что `pnpm link <папка>`, только сразу
+# для всех названных пакетов. pnpm при этом переписывает lock-файл приложения. Обе правки временные
+# и не коммитятся; unlink откатывает их через git. В репозиторий соседа не пишется ничего.
+
+set -u
+
+scope="${DEVBOX_SCOPE:-/workspaces/tree}"
+config="${DEVBOX_LINKS:-$scope/.devbox/links.yaml}"
+
+say() { echo "[devbox] $*"; }
+die() { echo "[devbox] $*" >&2; exit 1; }
+
+usage() {
+  sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
+  exit "${1:-0}"
+}
+
+# Отметка «это приложение прилинковано мной» лежит в `.git` клона: наружу она не уезжает, а без
+# неё чужие незакоммиченные правки в тех же двух файлах нельзя отличить от своих.
+mark_of() { echo "$(git -C "$1" rev-parse --absolute-git-dir)/devbox-link"; }
+
+# Пакеты соседа: «имя<TAB>папка» по одному на строку.
+packages_of() {
+  find "$1" -name node_modules -prune -o -name dist -prune -o -name package.json -print 2>/dev/null |
+    while read -r manifest; do
+      name="$(jq -r '.name // empty' "$manifest" 2>/dev/null)"
+      [ -n "$name" ] && printf '%s\t%s\n' "$name" "$(dirname "$manifest")"
+    done
+}
+
+# Имена всех зависимостей приложения — из всех его package.json.
+wanted_by() {
+  find "$1" -name node_modules -prune -o -name dist -prune -o -name package.json -print 2>/dev/null |
+    while read -r manifest; do
+      jq -r '[.dependencies, .devDependencies] | map(select(.) | keys[]) | .[]' "$manifest" 2>/dev/null
+    done | sort -u
+}
+
+restore() {
+  app="$1"
+  dir="$scope/$app"
+  mark="$(mark_of "$dir")"
+
+  for file in pnpm-workspace.yaml pnpm-lock.yaml; do
+    if git -C "$dir" ls-files --error-unmatch "$file" >/dev/null 2>&1; then
+      git -C "$dir" checkout -- "$file"
+    elif grep -qx "$file" "$mark" 2>/dev/null; then
+      # Файла в репозитории не было — его завёл link.
+      rm -f "$dir/$file"
+    fi
+  done
+
+  rm -f "$mark"
+}
+
+link_one() {
+  app="$1"
+  dir="$scope/$app"
+
+  [ -f "$dir/package.json" ] || die "$app: нет такого приложения в скоупе ($dir)"
+  [ "$(yq -r ".\"$app\" | tag" "$config")" = "!!map" ] || die "$app: не описан в $config"
+
+  mark="$(mark_of "$dir")"
+
+  if [ -f "$mark" ]; then
+    restore "$app"
+  elif [ -n "$(git -C "$dir" status --porcelain -- pnpm-workspace.yaml pnpm-lock.yaml)" ]; then
+    die "$app: в pnpm-workspace.yaml или pnpm-lock.yaml есть ваши незакоммиченные правки — линк их затрёт при откате. Сохраните или откатите их сами."
+  fi
+
+  created=""
+  [ -f "$dir/pnpm-workspace.yaml" ] || created="pnpm-workspace.yaml"
+  [ -f "$dir/pnpm-lock.yaml" ] || created="$created pnpm-lock.yaml"
+
+  # Отметка ставится ДО первой правки: оборвётся линк на середине — unlink всё равно откатит.
+  { date -u +%Y-%m-%dT%H:%M:%SZ; for file in $created; do echo "$file"; done; } > "$mark"
+
+  wanted="$(wanted_by "$dir")"
+  count=0
+
+  for neighbour in $(yq -r ".\"$app\" | keys | .[]" "$config"); do
+    [ -d "$scope/$neighbour" ] || die "$app: соседа $neighbour нет в скоупе"
+
+    table="$(packages_of "$scope/$neighbour")"
+    what="$(yq -r ".\"$app\".\"$neighbour\" | tag" "$config")"
+
+    if [ "$what" = "!!seq" ]; then
+      # Названные пакеты: полным именем, хвостом имени после `/` или именем папки.
+      names=""
+      for item in $(yq -r ".\"$app\".\"$neighbour\"[]" "$config"); do
+        found="$(printf '%s\n' "$table" | awk -F'\t' -v item="$item" '{ tail = $1; sub(/^.*\//, "", tail); folder = $2; sub(/^.*\//, "", folder); if ($1 == item || tail == item || folder == item) { print $1; exit } }')"
+        [ -n "$found" ] || die "$app: у соседа $neighbour нет пакета «$item»"
+        names="$names $found"
+      done
+    elif [ "$(yq -r ".\"$app\".\"$neighbour\"" "$config")" = "all" ]; then
+      # Все пакеты соседа, которые приложение использует.
+      names="$(printf '%s\n' "$table" | cut -f1 | sort -u | while read -r name; do
+        printf '%s\n' "$wanted" | grep -Fxq "$name" && echo "$name"
+      done)"
+    else
+      die "$app → $neighbour: ожидается список пакетов или слово all"
+    fi
+
+    for name in $names; do
+      target="$(printf '%s\n' "$table" | awk -F'\t' -v name="$name" '$1 == name { print $2; exit }')"
+      relative="$(realpath --relative-to="$dir" "$target")"
+      touch "$dir/pnpm-workspace.yaml"
+      NAME="$name" LINK="link:$relative" yq -i '.overrides[strenv(NAME)] = strenv(LINK)' "$dir/pnpm-workspace.yaml"
+      say "$app: $name → $neighbour/$(realpath --relative-to="$scope/$neighbour" "$target")"
+      count=$((count + 1))
+    done
+  done
+
+  if [ "$count" -eq 0 ]; then
+    restore "$app"
+    die "$app: линковать нечего — ни один пакет соседа приложением не используется"
+  fi
+
+  say "$app: pnpm install"
+  (cd "$dir" && pnpm install) || die "$app: установка не прошла. Ссылки записаны; откатить — devbox unlink $app"
+  say "$app: прилинкован ($count). Не коммитьте pnpm-workspace.yaml и pnpm-lock.yaml, пока линк стоит."
+}
+
+unlink_one() {
+  app="$1"
+  dir="$scope/$app"
+
+  [ -d "$dir/.git" ] || die "$app: нет такого приложения в скоупе ($dir)"
+  [ -f "$(mark_of "$dir")" ] || die "$app: не прилинкован командой devbox link — откатывать нечего"
+
+  restore "$app"
+  say "$app: pnpm-workspace.yaml и pnpm-lock.yaml возвращены"
+
+  say "$app: pnpm install"
+  (cd "$dir" && pnpm install) || die "$app: файлы возвращены, но установка из реестра не прошла — в node_modules остались прежние ссылки. Повторите pnpm install, когда реестр будет доступен."
+  say "$app: отлинкован"
+}
+
+[ $# -ge 1 ] || usage 1
+command="$1"
+shift
+
+case "$command" in
+  link | unlink) ;;
+  -h | --help | help) usage 0 ;;
+  *) usage 1 ;;
+esac
+
+[ -f "$config" ] || die "нет конфига линков: $config"
+
+if [ $# -eq 0 ]; then
+  set -- $(yq -r 'keys | .[]' "$config")
+  [ $# -gt 0 ] || die "в $config не описано ни одного приложения"
+fi
+
+for app in "$@"; do
+  "${command}_one" "$app"
+done

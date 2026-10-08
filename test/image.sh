@@ -53,18 +53,20 @@ inside "путь к конфигу mani" '[ "$MANI_CONFIG" = /workspaces/tree/.d
 inside "путь к конфигу fnox" '[ "$FNOX_CONFIG_DIR" = /workspaces/tree/.devbox/fnox ]'
 inside "путь к ключу age" '[ "$FNOX_AGE_KEY_FILE" = /home/node/.secrets/age.txt ]'
 
-# Описание общей установки pnpm стоит этажом выше скоупа и ведёт в его конфиг.
-inside "ссылка для связки соседей" \
-  '[ "$(readlink /workspaces/pnpm-workspace.yaml)" = /workspaces/tree/.devbox/pnpm-workspace.yaml ]'
+# Ручной линк на пакеты соседа: команда девбокса и разборщик её конфига.
+inside "команда devbox и yq на месте" 'command -v yq >/dev/null && devbox --help | grep -q "devbox unlink"'
+inside "devbox без конфига линков говорит об этом, а не падает молча" \
+  'devbox link 2>&1 | grep -q "нет конфига линков"'
 
 # Метку читает редактор: битый JSON или пропавшая команда — и среда молча не поднимается.
 meta="$($docker image inspect "$image" --format '{{ index .Config.Labels "devcontainer.metadata" }}' 2>/dev/null)"
 label "метка: пользователь node" '.[0].remoteUser == "node" and .[0].containerUser == "node"'
 label "метка: при создании — mise install" '.[0].postCreateCommand == "mise install"'
-label "метка: при подключении — репозитории и bootstrap" \
-  '.[0].postAttachCommand.repos | contains("mani sync") and contains("mise run bootstrap")'
-label "метка: при подключении — расширения" \
-  '.[0].postAttachCommand.extensions | contains("--install-extension")'
+label "метка: при подключении — репозитории, расширения, bootstrap" \
+  '.[0].postAttachCommand | contains("mani sync") and contains("--install-extension") and contains("mise run bootstrap")'
+# Расширение, вставшее раньше репозиториев, осматривает пустые папки.
+label "метка: расширения ставятся после клонирования" \
+  '.[0].postAttachCommand | index("mani sync") < index("--install-extension")'
 
 if [ "$failed" -ne 0 ]; then
   echo "[проверки] образ $image не прошёл"
