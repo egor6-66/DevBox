@@ -1,16 +1,22 @@
 #!/bin/sh
-# Линк приложения на локальные пакеты соседнего репозитория — и обратно.
+# Команды девбокса — то немногое, чего нет у готовых инструментов.
 #
-#   devbox link [приложение…]      прилинковать, как написано в .devbox/links.yaml
-#   devbox unlink [приложение…]    вернуть приложение как было
+#   devbox agent [репозиторий роль]   запустить агента; без имён — выбор из списка
+#   devbox link [приложение…]         прилинковать, как написано в .devbox/links.yaml
+#   devbox unlink [приложение…]       вернуть приложение как было
 #
-# Без имён — все приложения из конфига. При старте контейнера ничего из этого не запускается:
-# линк — ручное временное действие на время правки пакета.
+# При старте контейнера ничего из этого не запускается.
 #
-# Что делает link: дописывает в `pnpm-workspace.yaml` ПРИЛОЖЕНИЯ блок `overrides` со ссылками на
-# папки пакетов соседа и запускает его `pnpm install` — то же, что `pnpm link <папка>`, только сразу
-# для всех названных пакетов. pnpm при этом переписывает lock-файл приложения. Обе правки временные
-# и не коммитятся; unlink откатывает их через git. В репозиторий соседа не пишется ничего.
+# agent. Роли лежат в самих репозиториях (`.claude/roles/<роль>.json`), список собирается с диска.
+# Агент запускается в папке репозитория с именем сессии «репозиторий · роль» (`claude -n`): его
+# Claude Code сам пишет в заголовок терминала, и вкладка показывает, кто где.
+#
+# link / unlink. Линк приложения на локальные пакеты соседнего репозитория — ручное временное
+# действие на время правки пакета. link дописывает в `pnpm-workspace.yaml` ПРИЛОЖЕНИЯ блок
+# `overrides` со ссылками на папки пакетов соседа и запускает его `pnpm install` — то же, что
+# `pnpm link <папка>`, только сразу для всех названных пакетов. pnpm при этом переписывает
+# lock-файл приложения. Обе правки временные и не коммитятся; unlink откатывает их через git.
+# В репозиторий соседа не пишется ничего.
 
 set -u
 
@@ -21,7 +27,7 @@ say() { echo "[devbox] $*"; }
 die() { echo "[devbox] $*" >&2; exit 1; }
 
 usage() {
-  sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -146,11 +152,51 @@ unlink_one() {
   say "$app: отлинкован"
 }
 
+# Роли всех репозиториев скоупа: «репозиторий/роль» по одной на строку.
+roles() {
+  for file in "$scope"/*/.claude/roles/*.json; do
+    [ -f "$file" ] || continue
+    repo="${file#"$scope"/}"
+    repo="${repo%%/*}"
+    echo "$repo/$(basename "$file" .json)"
+  done
+}
+
+agent() {
+  if [ $# -eq 0 ]; then
+    list="$(roles)"
+    [ -n "$list" ] || die "ролей не найдено: в репозиториях скоупа нет .claude/roles/*.json"
+
+    echo "$list" | awk '{ printf "%3d) %s\n", NR, $0 }' | column -c "${COLUMNS:-100}" 2>/dev/null ||
+      echo "$list" | awk '{ printf "%3d) %s\n", NR, $0 }'
+    printf 'агент (номер): '
+    read -r number || exit 1
+    case "$number" in
+      "" | *[!0-9]*) die "нужен номер из списка" ;;
+    esac
+    pick="$(echo "$list" | sed -n "${number}p" 2>/dev/null)"
+    [ -n "$pick" ] || die "нет такого номера: $number"
+    repo="${pick%%/*}"
+    role="${pick#*/}"
+  elif [ $# -eq 2 ]; then
+    repo="$1"
+    role="$2"
+  else
+    die "ожидается: devbox agent [репозиторий роль]"
+  fi
+
+  [ -f "$scope/$repo/.claude/roles/$role.json" ] || die "$repo: нет роли «$role» ($scope/$repo/.claude/roles/$role.json)"
+
+  cd "$scope/$repo" || exit 1
+  exec claude --settings ".claude/roles/$role.json" -n "$repo · $role"
+}
+
 [ $# -ge 1 ] || usage 1
 command="$1"
 shift
 
 case "$command" in
+  agent) agent "$@" ;;
   link | unlink) ;;
   -h | --help | help) usage 0 ;;
   *) usage 1 ;;

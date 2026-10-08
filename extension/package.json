@@ -1,0 +1,39 @@
+{
+  "name": "devbox",
+  "displayName": "DevBox",
+  "description": "Кнопки поверх команд девбокса: агенты скоупа одним кликом, с именем на вкладке.",
+  "version": "0.0.1",
+  "publisher": "egor6-66",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/egor6-66/DevBox" },
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "extensionKind": ["workspace"],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [{ "id": "devbox", "title": "DevBox", "icon": "media/devbox.svg" }]
+    },
+    "views": {
+      "devbox": [{ "id": "devbox.agents", "name": "Агенты" }]
+    },
+    "viewsWelcome": [
+      {
+        "view": "devbox.agents",
+        "contents": "В репозиториях скоупа не найдено ролей: ожидаются файлы `.claude/roles/<роль>.json`."
+      }
+    ],
+    "commands": [
+      { "command": "devbox.agents.refresh", "title": "Обновить", "category": "DevBox", "icon": "$(refresh)" },
+      { "command": "devbox.agents.launch", "title": "Запустить агента", "category": "DevBox", "icon": "$(play)" }
+    ],
+    "menus": {
+      "view/title": [{ "command": "devbox.agents.refresh", "when": "view == devbox.agents", "group": "navigation" }],
+      "view/item/context": [
+        { "command": "devbox.agents.launch", "when": "view == devbox.agents && viewItem == role", "group": "inline" }
+      ],
+      "commandPalette": [{ "command": "devbox.agents.launch", "when": "false" }]
+    }
+  }
+}
