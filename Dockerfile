@@ -1,6 +1,13 @@
 # Образ девбокса: окружение целиком одним слепком — Node, mise и пути, по которым человек монтирует тома.
 # При старте контейнера работают родные команды инструментов (метка внизу); своя команда одна —
 # ручной линк на пакеты соседа (`bin/devbox`).
+# Расширение редактора упаковывается здесь же, отдельной ступенью: в образ едет готовый файл, а
+# упаковщик (`vsce`, родной инструмент VS Code) в нём не остаётся.
+FROM mcr.microsoft.com/devcontainers/typescript-node:24 AS extension
+WORKDIR /src
+COPY extension/ .
+RUN npx --yes @vscode/vsce@3 package --skip-license --out /devbox.vsix
+
 FROM mcr.microsoft.com/devcontainers/typescript-node:24
 
 RUN corepack enable
@@ -19,6 +26,10 @@ RUN curl -fsSL "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/
     && chmod +x /usr/local/bin/yq
 COPY bin/devbox /usr/local/bin/devbox
 RUN chmod +x /usr/local/bin/devbox
+
+# Расширение девбокса — кнопки поверх команды `devbox` (панель «Агенты»). Едет в образе файлом;
+# редактору оно названо в метке внизу, путём к этому файлу.
+COPY --from=extension /devbox.vsix /usr/local/share/devbox/devbox.vsix
 
 # Браузера в образе НЕТ: его ставит фичей тот, кому он нужен (`devcontainer.json`, apt-пакет
 # chromium) — так он по выбору, а образ остаётся лёгким. Здесь только флаг для него: в контейнере
@@ -94,6 +105,7 @@ RUN mkdir -p /home/node/.secrets /home/node/.tools /home/node/.pnpm-store /works
 LABEL devcontainer.metadata='[{ \
   "containerUser": "node", \
   "remoteUser": "node", \
+  "customizations": { "vscode": { "extensions": ["/usr/local/share/devbox/devbox.vsix"] } }, \
   "postCreateCommand": "mise install", \
   "postAttachCommand": "mani sync --sync-gitignore=false --sync-remotes" \
 }]'

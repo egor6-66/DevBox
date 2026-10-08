@@ -70,6 +70,11 @@ inside "devbox без конфига линков говорит об этом, 
 meta="$($docker image inspect "$image" --format '{{ index .Config.Labels "devcontainer.metadata" }}' 2>/dev/null)"
 label "метка: пользователь node" '.[0].remoteUser == "node" and .[0].containerUser == "node"'
 label "метка: при создании — mise install" '.[0].postCreateCommand == "mise install"'
+# Расширение девбокса едет в образе файлом, и редактору оно названо путём к этому файлу.
+inside "расширение девбокса лежит в образе" 'test -s /usr/local/share/devbox/devbox.vsix'
+label "метка: редактору названо расширение девбокса" \
+  '.[0].customizations.vscode.extensions | index("/usr/local/share/devbox/devbox.vsix") != null'
+
 # При подключении образ делает одно — приводит репозитории к конфигу. Расширения ставит редактор по
 # списку из devcontainer.json человека, библиотеки и свои скрипты запускает человек.
 label "метка: при подключении — только репозитории" \
