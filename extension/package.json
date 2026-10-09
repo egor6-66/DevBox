@@ -1,28 +1,54 @@
 {
   "name": "devbox",
   "displayName": "DevBox",
-  "description": "Кнопки поверх команд девбокса: агенты скоупа одним кликом, стартовые конфиги нового скоупа.",
-  "version": "0.1.0",
+  "description": "Кнопки поверх команд девбокса: применить конфиги, пересобрать контейнер, агенты скоупа одним кликом, стартовые конфиги нового скоупа.",
+  "version": "0.2.0",
   "publisher": "egor6-66",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/egor6-66/DevBox" },
-  "engines": { "vscode": "^1.90.0" },
-  "categories": ["Other"],
-  "extensionKind": ["workspace"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/egor6-66/DevBox"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
   "main": "./extension.js",
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "contributes": {
     "viewsContainers": {
-      "activitybar": [{ "id": "devbox", "title": "DevBox", "icon": "media/devbox.svg" }]
+      "activitybar": [
+        {
+          "id": "devbox",
+          "title": "DevBox",
+          "icon": "media/devbox.svg"
+        }
+      ]
     },
     "views": {
-      "devbox": [{ "id": "devbox.agents", "name": "Агенты" }]
+      "devbox": [
+        {
+          "id": "devbox.scope",
+          "name": "Скоуп"
+        },
+        {
+          "id": "devbox.agents",
+          "name": "Агенты"
+        }
+      ]
     },
     "viewsWelcome": [
       {
-        "view": "devbox.agents",
+        "view": "devbox.scope",
         "when": "devbox.scope == empty",
-        "contents": "В этом скоупе ещё нет конфигов девбокса.\n[Создать конфиги скоупа](command:devbox.init)\nПоявится папка `.devbox` со стартовым набором: инструменты, репозитории, MCP для агентов, линки, свои скрипты — и файл окна."
+        "contents": "В этом скоупе ещё нет конфигов девбокса.\n[Создать конфиги скоупа](command:devbox.init)\nПоявится папка `.devbox` со стартовым набором: инструменты, репозитории, MCP для агентов, линки, свои скрипты."
       },
       {
         "view": "devbox.agents",
@@ -31,13 +57,50 @@
       }
     ],
     "commands": [
-      { "command": "devbox.init", "title": "Создать конфиги скоупа", "category": "DevBox" },
-      { "command": "devbox.agents.refresh", "title": "Обновить", "category": "DevBox", "icon": "$(refresh)" },
-      { "command": "devbox.agents.launch", "title": "Запустить агента", "category": "DevBox", "icon": "$(play)" }
+      {
+        "command": "devbox.init",
+        "title": "Создать конфиги скоупа",
+        "category": "DevBox"
+      },
+      {
+        "command": "devbox.sync",
+        "title": "Применить конфиги",
+        "category": "DevBox",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "devbox.rebuild",
+        "title": "Пересобрать контейнер",
+        "category": "DevBox",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "devbox.agents.refresh",
+        "title": "Обновить",
+        "category": "DevBox",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "devbox.agents.launch",
+        "title": "Запустить агента",
+        "category": "DevBox",
+        "icon": "$(play)"
+      }
     ],
     "menus": {
-      "view/title": [{ "command": "devbox.agents.refresh", "when": "view == devbox.agents", "group": "navigation" }],
-      "commandPalette": [{ "command": "devbox.agents.launch", "when": "false" }]
+      "view/title": [
+        {
+          "command": "devbox.agents.refresh",
+          "when": "view == devbox.agents",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "devbox.agents.launch",
+          "when": "false"
+        }
+      ]
     }
   }
 }

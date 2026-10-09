@@ -62,7 +62,7 @@ inside "браузера в образе нет, флаг для него на �
   '! command -v chromium >/dev/null && grep -q -- "--no-sandbox" /etc/chromium.d/devbox-no-sandbox'
 
 # Команда девбокса: собрана, запускается, знает свои команды.
-inside "команда devbox на месте" 'devbox --help | grep -q "devbox init" && devbox --help | grep -q "devbox unlink"'
+inside "команда devbox на месте" 'devbox --help | grep -q "devbox init" && devbox --help | grep -q "devbox sync" && devbox --help | grep -q "devbox unlink"'
 inside "devbox без конфига линков говорит об этом, а не падает молча" \
   'devbox link 2>&1 | grep -q "нет конфига линков"'
 
@@ -83,15 +83,19 @@ inside "расширение девбокса лежит в образе" 'test 
 label "метка: редактору названо расширение девбокса" \
   '.[0].customizations.vscode.extensions | index("/usr/local/share/devbox/devbox.vsix") != null'
 
-# При подключении образ делает два дела родными командами: ставит инструменты и приводит
-# репозитории к конфигу. Расширения ставит редактор, библиотеки и свои скрипты запускает человек.
-attach='mise install && { test ! -f "$MANI_CONFIG" || mani sync --sync-gitignore=false --sync-remotes; }'
-label "метка: при подключении — инструменты, затем репозитории, если есть их конфиг" \
-  ".[0].postAttachCommand == $(printf '%s' "$attach" | jq -Rs .)"
+# При подключении образ выполняет одно — «применить конфиги». Расширения ставит редактор,
+# библиотеки и свои скрипты запускает человек.
+label "метка: при подключении — devbox sync" '.[0].postAttachCommand == "devbox sync"'
 label "метка: при создании контейнера образ ничего не запускает" '.[0] | has("postCreateCommand") | not'
 
-# Новый скоуп пуст: ни конфигов, ни инструментов. Команда старта обязана пройти и на нём.
-inside "пустой скоуп: команда старта проходит без ошибок" "cd /workspaces/tree && $attach"
+# Новый скоуп пуст: ни конфигов, ни инструментов. Команда старта обязана пройти на нём и ничего в
+# нём не завести — файлы в пустом скоупе создаёт только человек.
+inside "пустой скоуп: команда старта проходит и оставляет его пустым" \
+  'cd /workspaces/tree && devbox sync >/dev/null && test -z "$(ls -A)"'
+
+# Конфиги есть, репозиториев в них ещё нет: старт проходит, окно получает папку конфигов.
+inside "скоуп со стартовыми конфигами: команда старта без сети не нужна и окно в порядке" \
+  'cd /workspaces/tree && devbox init >/dev/null && : > .devbox/mise.toml && devbox sync >/dev/null && node -e "const w = JSON.parse(require(\"fs\").readFileSync(\"tree.code-workspace\", \"utf8\")); if (w.folders.length !== 1 || w.folders[0].name !== \".devbox\" || !w.settings) process.exit(1)"'
 
 if [ "$failed" -ne 0 ]; then
   echo "[проверки] образ $image не прошёл"

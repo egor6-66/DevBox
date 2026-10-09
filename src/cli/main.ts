@@ -7,6 +7,7 @@ import { init } from "../core/init.ts";
 import { link, linkedApps, unlink } from "../core/links.ts";
 import { systemRunner } from "../core/process.ts";
 import { type Scope, resolveScope } from "../core/scope.ts";
+import { sync } from "../core/sync.ts";
 
 // Команда `devbox`: разбирает аргументы, зовёт ядро, печатает итог. Логики здесь нет — та же,
 // что у расширения, лежит в `core`.
@@ -14,11 +15,12 @@ import { type Scope, resolveScope } from "../core/scope.ts";
 const USAGE = `Команды девбокса — то немногое, чего нет у готовых инструментов.
 
   devbox init                       разложить стартовые конфиги в пустом скоупе
+  devbox sync                       применить конфиги: инструменты, репозитории, папки окна
   devbox agent [репозиторий роль]   запустить агента; без имён — выбор из списка
   devbox link [приложение…]         прилинковать, как написано в .devbox/links.yaml
   devbox unlink [приложение…]       вернуть приложение как было
 
-При старте контейнера ничего из этого не запускается.`;
+При подключении редактора образ сам выполняет sync; остальное запускает человек.`;
 
 const say = (text: string): void => console.log(`[devbox] ${text}`);
 
@@ -34,8 +36,18 @@ const COMMANDS: Readonly<Record<string, Command>> = {
     if (report.created.length === 0) {
       say("все стартовые конфиги уже на месте");
     } else {
-      say("дальше: впишите репозитории в .devbox/mani.yaml и пересоздайте контейнер (Rebuild Container)");
+      say("дальше: впишите репозитории в .devbox/mani.yaml и примените конфиги — devbox sync");
     }
+
+    return 0;
+  },
+
+  sync(scope) {
+    const { window } = sync(scope, systemRunner);
+
+    for (const name of window.added) say(`в окно добавлена папка ${name}`);
+    for (const name of window.removed) say(`из окна убрана папка ${name}`);
+    say("конфиги применены");
 
     return 0;
   },

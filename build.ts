@@ -6,9 +6,11 @@
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, rmSync } from "node:fs";
 
-import { build } from "esbuild";
+import { type BuildOptions, build } from "esbuild";
 
-const common = { bundle: true, platform: "node", target: "node24", logLevel: "warning" } as const;
+// Библиотеку берём в её ESM-сборке, если такая есть: UMD-обёртки (jsonc-parser) зовут свои части
+// через `require` по ходу дела, и сборщик не может вложить их в один файл.
+const common: BuildOptions = { bundle: true, platform: "node", target: "node24", logLevel: "warning", mainFields: ["module", "main"] };
 
 rmSync("dist", { recursive: true, force: true });
 mkdirSync("dist/extension", { recursive: true });

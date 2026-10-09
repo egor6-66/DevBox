@@ -78,6 +78,81 @@ class AgentsProvider implements vscode.TreeDataProvider<Node> {
   }
 }
 
+// Панель «Скоуп»: действия над скоупом целиком — кнопками, чтобы не искать команды через F1.
+interface Action {
+  readonly label: string;
+  readonly icon: string;
+  readonly command: string;
+  readonly tooltip: string;
+}
+
+const ACTIONS: readonly Action[] = [
+  {
+    label: "Применить конфиги",
+    icon: "sync",
+    command: "devbox.sync",
+    tooltip: "Привести скоуп к конфигам из .devbox: инструменты, репозитории, папки окна",
+  },
+  {
+    label: "Пересобрать контейнер",
+    icon: "debug-restart",
+    command: "devbox.rebuild",
+    tooltip: "То же, что Dev Containers: Rebuild Container",
+  },
+];
+
+class ScopeProvider implements vscode.TreeDataProvider<Action> {
+  readonly #changed = new vscode.EventEmitter<void>();
+  readonly onDidChangeTreeData = this.#changed.event;
+  // Конфиги правили после последнего применения.
+  pending = false;
+
+  refresh(): void {
+    this.#changed.fire();
+  }
+
+  getChildren(action?: Action): Action[] {
+    return action === undefined && hasConfigs(currentScope()) ? [...ACTIONS] : [];
+  }
+
+  getTreeItem(action: Action): vscode.TreeItem {
+    const item = new vscode.TreeItem(action.label, vscode.TreeItemCollapsibleState.None);
+    item.iconPath = new vscode.ThemeIcon(action.icon);
+    item.tooltip = action.tooltip;
+    item.description = action.command === "devbox.sync" && this.pending ? "конфиги изменились" : "";
+    item.command = { command: action.command, title: action.label };
+
+    return item;
+  }
+}
+
+const SYNC_TERMINAL = "devbox · применить";
+
+// Применение идёт в терминале: оно качает и клонирует, и человек должен видеть, что происходит.
+function applyConfigs(scopeView: ScopeProvider): void {
+  const terminal = findTerminal(SYNC_TERMINAL) ?? vscode.window.createTerminal({ name: SYNC_TERMINAL, cwd: currentScope().root, iconPath: new vscode.ThemeIcon("sync") });
+
+  terminal.show();
+  terminal.sendText("devbox sync");
+
+  scopeView.pending = false;
+  scopeView.refresh();
+}
+
+// Конфиг в `.devbox` сохранили — напоминаем применить, один раз на пачку правок.
+function configsChanged(scopeView: ScopeProvider): void {
+  if (scopeView.pending) return;
+
+  scopeView.pending = true;
+  scopeView.refresh();
+
+  const apply = "Применить";
+
+  void vscode.window.showInformationMessage("DevBox: конфиги скоупа изменились.", apply).then((picked) => {
+    if (picked === apply) applyConfigs(scopeView);
+  });
+}
+
 // Один агент — один терминал: повторный клик показывает уже открытый, а не плодит второй.
 function launchAgent(node?: Node): void {
   if (node?.kind !== "agent") return;
@@ -152,7 +227,7 @@ async function greetNewScope(context: vscode.ExtensionContext): Promise<void> {
 
   const open = "Открыть mani.yaml";
   const picked = await vscode.window.showInformationMessage(
-    "DevBox: конфиги скоупа созданы. Впишите репозитории в .devbox/mani.yaml и пересоздайте контейнер (Rebuild Container).",
+    "DevBox: конфиги скоупа созданы. Впишите репозитории в .devbox/mani.yaml и нажмите «Применить конфиги» в панели DevBox.",
     open,
   );
 
@@ -161,14 +236,26 @@ async function greetNewScope(context: vscode.ExtensionContext): Promise<void> {
 
 export function activate(context: vscode.ExtensionContext): void {
   const provider = new AgentsProvider();
-  const refresh = (): void => provider.refresh();
+  const scopeView = new ScopeProvider();
+  const refresh = (): void => {
+    provider.refresh();
+    scopeView.refresh();
+  };
 
   // Роль добавили или убрали в репозитории, появилась папка конфигов — панель обновляется сама.
   const watcher = vscode.workspace.createFileSystemWatcher(
     new vscode.RelativePattern(currentScope().root, "{*/.claude/roles/*.json,.devbox}"),
   );
 
+  // Правят то, из чего скоуп производится: список репозиториев и инструменты.
+  const configs = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(currentScope().root, ".devbox/{mani.yaml,mise.toml}"));
+
   context.subscriptions.push(
+    vscode.window.registerTreeDataProvider("devbox.scope", scopeView),
+    vscode.commands.registerCommand("devbox.sync", () => applyConfigs(scopeView)),
+    vscode.commands.registerCommand("devbox.rebuild", () => vscode.commands.executeCommand("remote-containers.rebuildContainer")),
+    configs,
+    configs.onDidChange(() => configsChanged(scopeView)),
     vscode.window.registerTreeDataProvider("devbox.agents", provider),
     vscode.commands.registerCommand("devbox.agents.refresh", refresh),
     vscode.commands.registerCommand("devbox.agents.launch", launchAgent),
