@@ -20,6 +20,7 @@ function runnerWith(codes: Readonly<Record<string, number>> = {}): Runner & { ca
   return {
     calls,
     capture: () => ({ code: 0, stdout: "" }),
+    pipe: () => ({ code: 0, output: new Uint8Array() }),
     passthrough(command, args, cwd) {
       calls.push([command, ...args].join(" "));
 

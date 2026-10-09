@@ -2,7 +2,7 @@
   "name": "devbox",
   "displayName": "DevBox",
   "description": "Кнопки поверх команд девбокса: применить конфиги, пересобрать контейнер, агенты скоупа одним кликом, стартовые конфиги нового скоупа.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "egor6-66",
   "license": "MIT",
   "repository": {
@@ -73,6 +73,18 @@
         "title": "Пересобрать контейнер",
         "category": "DevBox",
         "icon": "$(debug-restart)"
+      },
+      {
+        "command": "devbox.secrets.key",
+        "title": "Создать ключ секретов",
+        "category": "DevBox",
+        "icon": "$(key)"
+      },
+      {
+        "command": "devbox.snapshot.export",
+        "title": "Экспортировать слепок",
+        "category": "DevBox",
+        "icon": "$(package)"
       },
       {
         "command": "devbox.agents.refresh",

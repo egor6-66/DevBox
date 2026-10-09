@@ -61,6 +61,12 @@ inside "кэш pnpm — в томе кэша" '[ "$PNPM_CONFIG_STORE_DIR" = /hom
 inside "применение конфигов уводит сессии и кэш Claude Code в том кэша" \
   'cd /workspaces/tree && devbox sync >/dev/null && [ "$(readlink /home/node/.tools/claude/projects)" = /home/node/.store/claude/projects ] && [ "$(readlink /home/node/.tools/claude/cache)" = /home/node/.store/claude/cache ] && test -d /home/node/.store/claude/projects && test -z "$(ls -A /home/node/.secrets)"'
 
+# Слепок скоупа: образ знает свою версию и папку окна на хосте; без этой папки — понятный отказ.
+inside "образ знает свою версию и папку окна на хосте" '[ -n "$DEVBOX_IMAGE" ] && [ "$DEVBOX_HOST_DIR" = /home/node/.host ] && [ "$(stat -c %U /home/node/.host)" = node ]'
+inside "age есть в образе: слепок под паролем открывается до появления конфигов" 'command -v age >/dev/null'
+inside "слепок без папки хоста — отказ с подсказкой, какую строку добавить" \
+  'cd /workspaces/tree && devbox init >/dev/null && devbox snapshot export --open 2>&1 | grep -q "localWorkspaceFolder"'
+
 # Докачка навыков ходит в GitHub мимо сервера версий и при исчерпанном лимите валит весь старт.
 inside "докачка навыков mise выключена" '[ "$(mise settings get skills.fetch 2>/dev/null)" = false ]'
 

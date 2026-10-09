@@ -6,6 +6,8 @@ import { type Agent, agentName, launchOf, listAgents } from "../core/agents.ts";
 import { DevboxError } from "../core/errors.ts";
 import { init } from "../core/init.ts";
 import { type Scope, DEFAULT_ROOT, WINDOW_FILE, hasConfigs, resolveScope, windowFile } from "../core/scope.ts";
+import { hasKey, secretsPaths } from "../core/secrets.ts";
+import { hostPaths, pendingSnapshot } from "../core/snapshot.ts";
 
 // Расширение — кнопки поверх ядра. Своей логики у него нет: список агентов, способ запуска и
 // стартовые конфиги те же, что у команды `devbox`.
@@ -101,6 +103,20 @@ const ACTIONS: readonly Action[] = [
   },
 ];
 
+const SNAPSHOT_ACTION: Action = {
+  label: "Экспортировать слепок",
+  icon: "package",
+  command: "devbox.snapshot.export",
+  tooltip: "Снять слепок скоупа в папку на вашем компьютере: конфиги, секреты и точная версия девбокса",
+};
+
+const KEY_ACTION: Action = {
+  label: "Создать ключ секретов",
+  icon: "key",
+  command: "devbox.secrets.key",
+  tooltip: "Завести ключ в томе секретов и конфиг секретов скоупа",
+};
+
 class ScopeProvider implements vscode.TreeDataProvider<Action> {
   readonly #changed = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.#changed.event;
@@ -112,7 +128,11 @@ class ScopeProvider implements vscode.TreeDataProvider<Action> {
   }
 
   getChildren(action?: Action): Action[] {
-    return action === undefined && hasConfigs(currentScope()) ? [...ACTIONS] : [];
+    const scope = currentScope();
+
+    if (action !== undefined || !hasConfigs(scope)) return [];
+
+    return [...ACTIONS, SNAPSHOT_ACTION, ...(hasKey(secretsPaths(scope)) ? [] : [KEY_ACTION])];
   }
 
   getTreeItem(action: Action): vscode.TreeItem {
@@ -137,6 +157,52 @@ function applyConfigs(scopeView: ScopeProvider): void {
 
   scopeView.pending = false;
   scopeView.refresh();
+}
+
+const SCOPE_TERMINAL = "devbox · скоуп";
+
+// Ключ и слепок — в терминале: пароль слепка спрашивает age, и спрашивает он у терминала.
+function runInTerminal(command: string): void {
+  const terminal = findTerminal(SCOPE_TERMINAL) ?? vscode.window.createTerminal({ name: SCOPE_TERMINAL, cwd: currentScope().root, iconPath: new vscode.ThemeIcon("package") });
+
+  terminal.show();
+  terminal.sendText(command);
+}
+
+function createKey(scopeView: ScopeProvider): void {
+  runInTerminal("devbox secrets key");
+  // Ключ появится чуть позже нажатия — набор кнопок сверяем, когда команда отработала.
+  setTimeout(() => scopeView.refresh(), 3000);
+}
+
+async function exportSnapshot(): Promise<void> {
+  const locked = "С паролем";
+  const open = "Без пароля";
+  const picked = await vscode.window.showQuickPick(
+    [
+      { label: locked, detail: "Развернуть слепок сможет только тот, кто знает пароль" },
+      { label: open, detail: "Пароль не спрашивается; ключ и секреты едут открыто" },
+    ],
+    { title: "DevBox: слепок скоупа" },
+  );
+
+  if (picked !== undefined) runInTerminal(picked.label === open ? "devbox snapshot export --open" : "devbox snapshot export");
+}
+
+// Ключ памяти расширения: «слепок развёрнут, после открытия окна примени конфиги».
+const JUST_RESTORED = "devbox.justRestored";
+
+// Окно открыто из папки слепка, а скоуп пуст — разворачиваем сами. Когда появится файл окна,
+// редактор перезагрузится в скоуп, и уже там применятся конфиги: инструменты и репозитории.
+function restoreIfPending(context: vscode.ExtensionContext): boolean {
+  const scope = currentScope();
+
+  if (hasConfigs(scope) || pendingSnapshot(hostPaths()) === undefined) return false;
+
+  void context.globalState.update(JUST_RESTORED, scope.root);
+  runInTerminal("devbox snapshot restore");
+
+  return true;
 }
 
 // Конфиг в `.devbox` сохранили — напоминаем применить, один раз на пачку правок.
@@ -247,6 +313,10 @@ export function activate(context: vscode.ExtensionContext): void {
     new vscode.RelativePattern(currentScope().root, "{*/.claude/roles/*.json,.devbox}"),
   );
 
+  // Файл окна появился в скоупе, открытом папкой (слепок развёрнут) — переходим в окно. Не сразу:
+  // команда, которая его положила, ещё доделывает своё.
+  const windowCreated = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(currentScope().root, WINDOW_FILE));
+
   // Правят то, из чего скоуп производится: список репозиториев и инструменты.
   const configs = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(currentScope().root, ".devbox/{mani.yaml,mise.toml}"));
 
@@ -254,6 +324,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider("devbox.scope", scopeView),
     vscode.commands.registerCommand("devbox.sync", () => applyConfigs(scopeView)),
     vscode.commands.registerCommand("devbox.rebuild", () => vscode.commands.executeCommand("remote-containers.rebuildContainer")),
+    vscode.commands.registerCommand("devbox.secrets.key", () => createKey(scopeView)),
+    vscode.commands.registerCommand("devbox.snapshot.export", exportSnapshot),
     configs,
     configs.onDidChange(() => configsChanged(scopeView)),
     vscode.window.registerTreeDataProvider("devbox.agents", provider),
@@ -262,13 +334,26 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("devbox.init", () => initScope(context, refresh)),
     vscode.window.onDidOpenTerminal(refresh),
     vscode.window.onDidCloseTerminal(refresh),
+    windowCreated,
+    windowCreated.onDidCreate(() => setTimeout(() => void openWindowIfFolder(), 2000)),
     watcher,
     watcher.onDidCreate(refresh),
     watcher.onDidDelete(refresh),
   );
 
   // Скоуп с файлом окна открыт папкой — переходим в окно; уже в окне — здороваемся, если он новый.
-  void openWindowIfFolder().then((reopening) => (reopening ? undefined : greetNewScope(context)));
+  void openWindowIfFolder().then(async (reopening) => {
+    if (reopening || restoreIfPending(context)) return;
+
+    if (context.globalState.get(JUST_RESTORED) === currentScope().root && vscode.workspace.workspaceFile !== undefined) {
+      await context.globalState.update(JUST_RESTORED, undefined);
+      applyConfigs(scopeView);
+
+      return;
+    }
+
+    await greetNewScope(context);
+  });
 }
 
 export function deactivate(): void {}

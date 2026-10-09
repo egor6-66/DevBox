@@ -7,6 +7,8 @@ import { init } from "../core/init.ts";
 import { link, linkedApps, unlink } from "../core/links.ts";
 import { systemRunner } from "../core/process.ts";
 import { type Scope, resolveScope } from "../core/scope.ts";
+import { createKey, secretsPaths } from "../core/secrets.ts";
+import { exportSnapshot, hostPaths, pendingSnapshot, restoreSnapshot } from "../core/snapshot.ts";
 import { sync } from "../core/sync.ts";
 
 // Команда `devbox`: разбирает аргументы, зовёт ядро, печатает итог. Логики здесь нет — та же,
@@ -19,10 +21,15 @@ const USAGE = `Команды девбокса — то немногое, чег
   devbox agent [репозиторий роль]   запустить агента; без имён — выбор из списка
   devbox link [приложение…]         прилинковать, как написано в .devbox/links.yaml
   devbox unlink [приложение…]       вернуть приложение как было
+  devbox secrets key                завести ключ секретов и конфиг секретов скоупа
+  devbox snapshot export [--open]   снять слепок скоупа в папку на хосте (--open — без пароля)
+  devbox snapshot restore           развернуть слепок, из папки которого открыто окно
 
 При подключении редактора образ сам выполняет sync; остальное запускает человек.`;
 
 const say = (text: string): void => console.log(`[devbox] ${text}`);
+
+const SNAPSHOT_HINT = "snapshot";
 
 type Command = (scope: Scope, args: readonly string[]) => Promise<number> | number;
 
@@ -80,6 +87,52 @@ const COMMANDS: Readonly<Record<string, Command>> = {
     }
 
     return 0;
+  },
+
+  secrets(scope, args) {
+    const paths = secretsPaths(scope);
+
+    if (args[0] === "key") {
+      say(`ключ создан: ${paths.key}`);
+      say(`его открытая половина вписана в ${paths.config}: ${createKey(paths, systemRunner)}`);
+      say("дальше: fnox set -g ИМЯ — задать секрет; откройте новый терминал, чтобы он его увидел");
+
+      return 0;
+    }
+
+    throw new DevboxError("ожидается: devbox secrets key");
+  },
+
+  snapshot(scope, args) {
+    const [action, ...rest] = args;
+    const host = hostPaths();
+
+    if (action === "export") {
+      const open = rest.includes("--open");
+
+      say(open ? "слепок БЕЗ пароля: ключ и секреты поедут открыто — кто получил папку, получил всё" : "придумайте пароль слепка — его спросит age, дважды");
+
+      const report = exportSnapshot(scope, secretsPaths(scope), host, systemRunner, open);
+
+      say(`в слепке: конфиги скоупа${report.secrets.length > 0 ? `, секреты (${report.secrets.join(", ")})` : ", секретов нет"}, образ ${host.image}`);
+      say(`слепок лежит на вашем компьютере, в папке окна: ${SNAPSHOT_HINT}. Развернуть: переименовать папку как назовёте скоуп → «Open Folder in Container».`);
+
+      return 0;
+    }
+
+    if (action === "restore") {
+      const file = pendingSnapshot(host);
+
+      if (file === undefined) throw new DevboxError(`слепка нет: окно открыто не из папки слепка (${host.dir})`);
+
+      const report = restoreSnapshot(scope, secretsPaths(scope), file, systemRunner);
+
+      say(`слепок развёрнут: конфигов — ${report.configs.length}, секретов — ${report.secrets.length}`);
+
+      return 0;
+    }
+
+    throw new DevboxError("ожидается: devbox snapshot export [--open] | restore");
   },
 };
 

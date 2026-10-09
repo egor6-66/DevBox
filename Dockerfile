@@ -22,6 +22,12 @@ RUN corepack enable
 ARG MISE_VERSION=v2026.10.3
 RUN curl -fsSL https://mise.run | MISE_VERSION=${MISE_VERSION} MISE_INSTALL_PATH=/usr/local/bin/mise sh
 
+# age — в образе, хотя остальные инструменты ставит mise по конфигу скоупа. Слепок скоупа под
+# паролем надо открыть ДО того, как появятся конфиги: `mise.toml` лежит внутри слепка, и взять
+# age из него нечем. Найдено живьём 2026-10-09: на чистых томах развёртывание упало, не спросив
+# пароль. Когда mise поставит свой age, тот встанет первым в PATH — этот остаётся для первого шага.
+RUN apt-get update && apt-get install -y --no-install-recommends age && rm -rf /var/lib/apt/lists/*
+
 # Собственное у девбокса — то немногое, чего нет у готовых инструментов (README, «Устройство»):
 #  · команда `devbox` — стартовые конфиги нового скоупа, запуск агента, ручной линк приложения на
 #    пакеты соседа. Запускает её человек; при старте контейнера она не зовётся;
@@ -94,7 +100,7 @@ RUN echo 'command -v fnox >/dev/null 2>&1 && eval "$(fnox activate bash)"' >> /e
 # Точки монтирования готовятся ЗДЕСЬ, и это не перестраховка: пустой том docker наполняет
 # содержимым и правами того каталога, на который его смонтировали. Каталога нет — том достаётся
 # root'у, и первая же запись от пользователя отказывает.
-RUN mkdir -p /home/node/.secrets /home/node/.tools /home/node/.store /workspaces/tree \
+RUN mkdir -p /home/node/.secrets /home/node/.tools /home/node/.store /home/node/.host /workspaces/tree \
     && chown -R node:node /home/node /workspaces
 
 # Настройки контейнера едут В ОБРАЗЕ: редактор читает их метаданными и сливает со своим файлом,
@@ -129,6 +135,16 @@ RUN mkdir -p /home/node/.secrets /home/node/.tools /home/node/.store /workspaces
 #    в `.devbox/.vscode/tasks.json` и запускаются человеком.
 # ПОЛЬЗОВАТЕЛЬ ОБЪЯВЛЕН ЗДЕСЬ: всё, что образ готовит, принадлежит `node`. Без объявления редактор
 # подключается root'ом и человек пишет root-овые файлы в СВОИ тома. Ловилось живьём 2026-10-04.
+# Слепок скоупа записывает в свой `devcontainer.json` ТОЧНУЮ версию образа, на котором скоуп
+# работал, — её образ знает сам: выпуск передаёт её при сборке. Локальная сборка называется как
+# есть, и её слепок поднимется только на этой же машине.
+#
+# `/home/node/.host` — папка хоста, из которой открыто окно: человек показывает её одной строкой в
+# `devcontainer.json`. Оттуда слепок берёт сам `devcontainer.json`, туда кладётся, там же ищется.
+ARG DEVBOX_IMAGE=devbox:dev
+ENV DEVBOX_IMAGE=${DEVBOX_IMAGE} \
+    DEVBOX_HOST_DIR=/home/node/.host
+
 LABEL devcontainer.metadata='[{ \
   "containerUser": "node", \
   "remoteUser": "node", \

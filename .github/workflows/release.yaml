@@ -35,6 +35,8 @@ jobs:
         run: |
           full="${GITHUB_REF_NAME#v}"
           name="ghcr.io/${{ github.repository_owner }}/devbox"
+          # Образ знает свою точную версию: её слепок скоупа пишет в свой devcontainer.json.
+          echo "exact=${name}:${full}" >> "$GITHUB_OUTPUT"
 
           if [ "${full#*-}" != "$full" ]; then
             echo "list=${name}:${full}" >> "$GITHUB_OUTPUT"
@@ -50,3 +52,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.list }}
+          build-args: |
+            DEVBOX_IMAGE=${{ steps.tags.outputs.exact }}

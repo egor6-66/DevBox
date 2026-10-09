@@ -24,6 +24,7 @@ function runnerWith(pnpmCode = 0): Runner & { installs: string[] } {
   return {
     installs,
     capture: systemRunner.capture,
+    pipe: systemRunner.pipe,
     passthrough(command, args, cwd) {
       assert.equal(command, "pnpm");
       assert.deepEqual(args, ["install"]);

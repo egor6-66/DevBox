@@ -53,20 +53,29 @@ export function init(scope: Scope, templates: string = templatesDir()): InitRepo
     created.push(path);
   }
 
+  const linked = ensureLinks(scope);
+
+  created.push(...linked);
+  skipped.push(...LINKS.map(([at]) => at).filter((at) => !linked.includes(at)));
+
+  return { created, skipped };
+}
+
+// Поставить недостающие ссылки; занятое место не трогается. Возвращает созданные.
+export function ensureLinks(scope: Scope): string[] {
+  const created: string[] = [];
+
   for (const [at, to] of LINKS) {
     const target = join(scope.root, at);
 
-    if (exists(target)) {
-      skipped.push(at);
-      continue;
-    }
+    if (exists(target)) continue;
 
     mkdirSync(dirname(target), { recursive: true });
     symlinkSync(to, target);
     created.push(at);
   }
 
-  return { created, skipped };
+  return created;
 }
 
 function filesUnder(dir: string): string[] {
