@@ -1,12 +1,17 @@
 # Образ девбокса: окружение целиком одним слепком — Node, mise и пути, по которым человек монтирует тома.
-# При старте контейнера работают родные команды инструментов (метка внизу); своя команда одна —
-# ручной линк на пакеты соседа (`bin/devbox`).
-# Расширение редактора упаковывается здесь же, отдельной ступенью: в образ едет готовый файл, а
-# упаковщик (`vsce`, родной инструмент VS Code) в нём не остаётся.
-FROM mcr.microsoft.com/devcontainers/typescript-node:24 AS extension
+# При старте контейнера работают родные команды инструментов (метка внизу); собственный код — в
+# `src`, собирается ступенью ниже.
+# Собственный код девбокса собирается отдельной ступенью: из одного ядра (`src/core`) выходят
+# команда `devbox` одним файлом и расширение редактора. В образ едут только они — исходников,
+# зависимостей и сборщика в нём нет.
+FROM mcr.microsoft.com/devcontainers/typescript-node:24 AS build
 WORKDIR /src
-COPY extension/ .
-RUN npx --yes @vscode/vsce@3 package --skip-license --out /devbox.vsix
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY tsconfig.json build.ts ./
+COPY src src
+COPY extension extension
+RUN pnpm run build
 
 FROM mcr.microsoft.com/devcontainers/typescript-node:24
 
@@ -17,19 +22,15 @@ RUN corepack enable
 ARG MISE_VERSION=v2026.10.3
 RUN curl -fsSL https://mise.run | MISE_VERSION=${MISE_VERSION} MISE_INSTALL_PATH=/usr/local/bin/mise sh
 
-# Линк приложения на локальные пакеты соседа — единственный собственный код девбокса: команда
-# `devbox link` / `devbox unlink` читает `.devbox/links.yaml` скоупа. Запускает её человек; при
-# старте контейнера она не зовётся. Конфиг разбирает yq — рыночный разборщик YAML, одним файлом.
-ARG YQ_VERSION=v4.54.1
-ARG TARGETARCH
-RUN curl -fsSL "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_${TARGETARCH:-amd64}" -o /usr/local/bin/yq \
-    && chmod +x /usr/local/bin/yq
-COPY bin/devbox /usr/local/bin/devbox
+# Собственное у девбокса — то немногое, чего нет у готовых инструментов (README, «Устройство»):
+#  · команда `devbox` — стартовые конфиги нового скоупа, запуск агента, ручной линк приложения на
+#    пакеты соседа. Запускает её человек; при старте контейнера она не зовётся;
+#  · шаблоны стартовых конфигов — обычными файлами, их раскладывает `devbox init`;
+#  · расширение редактора — кнопки поверх той же логики; редактору оно названо в метке внизу.
+COPY --from=build /src/dist/devbox.mjs /usr/local/bin/devbox
+COPY --from=build /src/dist/devbox.vsix /usr/local/share/devbox/devbox.vsix
+COPY templates /usr/local/share/devbox/templates
 RUN chmod +x /usr/local/bin/devbox
-
-# Расширение девбокса — кнопки поверх команды `devbox` (панель «Агенты»). Едет в образе файлом;
-# редактору оно названо в метке внизу, путём к этому файлу.
-COPY --from=extension /devbox.vsix /usr/local/share/devbox/devbox.vsix
 
 # Браузера в образе НЕТ: его ставит фичей тот, кому он нужен (`devcontainer.json`, apt-пакет
 # chromium) — так он по выбору, а образ остаётся лёгким. Здесь только флаг для него: в контейнере
@@ -82,16 +83,19 @@ RUN mkdir -p /home/node/.secrets /home/node/.tools /home/node/.pnpm-store /works
 
 # Настройки контейнера едут В ОБРАЗЕ: редактор читает их метаданными и сливает со своим файлом,
 # поэтому у человека на хосте остаются только образ и тома.
-# При создании контейнера: mise ставит инструменты по `mise.toml`.
-# При подключении редактора: mani клонирует репозитории по `mani.yaml` и приводит их адреса
-# (remotes) к конфигу — названное в нём ставится, поставленное руками мимо него убирается.
-# Сменённый в конфиге адрес встаёт со второго прогона: первый его только снимает (mani 0.32.1,
-# 2026-10-07). Именно здесь, а не при создании: закрытым репозиториям нужен логин, а его в
-# контейнер передаёт редактор.
+# При подключении редактора — две родные команды по очереди:
+#  1. mise ставит инструменты по `mise.toml`. Когда всё уже стоит, это миг и без сети.
+#  2. mani клонирует репозитории по `mani.yaml` и приводит их адреса (remotes) к конфигу —
+#     названное в нём ставится, поставленное руками мимо него убирается. Сменённый в конфиге адрес
+#     встаёт со второго прогона: первый его только снимает (mani 0.32.1, 2026-10-07).
 #
-# Нет `mani.yaml` — шаг пропускается, а не падает: на новом, ещё пустом скоупе нет ни конфига, ни
-# самого mani (его ставит mise по `mise.toml`), и первый же запуск показывал бы человеку ошибку
-# раньше, чем он успел что-то положить.
+# Обе — при ПОДКЛЮЧЕНИИ, а не при создании контейнера:
+#  · закрытым репозиториям нужен логин, а его в контейнер передаёт редактор;
+#  · конфиги могут появиться уже после создания: человек открыл новый пустой скоуп, нажал «Создать
+#    конфиги» — окно переоткрылось, и поднимать скоуп надо на этом подключении. Пока инструменты
+#    ставились только при создании, здесь падало «mani: not found» (2026-10-09).
+#
+# Нет `mani.yaml` — второй шаг пропускается: на пустом скоупе клонировать нечего и нечем.
 #
 # Больше образ при старте не делает ничего, и это намеренно.
 #  · РАСШИРЕНИЯ ставит сам редактор по списку из `devcontainer.json` человека
@@ -110,6 +114,5 @@ LABEL devcontainer.metadata='[{ \
   "containerUser": "node", \
   "remoteUser": "node", \
   "customizations": { "vscode": { "extensions": ["/usr/local/share/devbox/devbox.vsix"] } }, \
-  "postCreateCommand": "mise install", \
-  "postAttachCommand": "test ! -f \"$MANI_CONFIG\" || mani sync --sync-gitignore=false --sync-remotes" \
+  "postAttachCommand": "mise install && { test ! -f \"$MANI_CONFIG\" || mani sync --sync-gitignore=false --sync-remotes; }" \
 }]'

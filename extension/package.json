@@ -1,8 +1,8 @@
 {
   "name": "devbox",
   "displayName": "DevBox",
-  "description": "Кнопки поверх команд девбокса: агенты скоупа одним кликом, с именем на вкладке.",
-  "version": "0.0.1",
+  "description": "Кнопки поверх команд девбокса: агенты скоупа одним кликом, стартовые конфиги нового скоупа.",
+  "version": "0.1.0",
   "publisher": "egor6-66",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/egor6-66/DevBox" },
@@ -10,7 +10,7 @@
   "categories": ["Other"],
   "extensionKind": ["workspace"],
   "main": "./extension.js",
-  "activationEvents": [],
+  "activationEvents": ["onStartupFinished"],
   "contributes": {
     "viewsContainers": {
       "activitybar": [{ "id": "devbox", "title": "DevBox", "icon": "media/devbox.svg" }]
@@ -21,18 +21,22 @@
     "viewsWelcome": [
       {
         "view": "devbox.agents",
-        "contents": "В репозиториях скоупа не найдено ролей: ожидаются файлы `.claude/roles/<роль>.json`."
+        "when": "devbox.scope == empty",
+        "contents": "В этом скоупе ещё нет конфигов девбокса.\n[Создать конфиги скоупа](command:devbox.init)\nПоявится папка `.devbox` со стартовым набором: инструменты, репозитории, MCP для агентов, линки, свои скрипты — и файл окна."
+      },
+      {
+        "view": "devbox.agents",
+        "when": "devbox.scope != empty",
+        "contents": "В репозиториях скоупа нет ролей агентов.\nРоль — файл `.claude/roles/<роль>.json` в самом репозитории."
       }
     ],
     "commands": [
+      { "command": "devbox.init", "title": "Создать конфиги скоупа", "category": "DevBox" },
       { "command": "devbox.agents.refresh", "title": "Обновить", "category": "DevBox", "icon": "$(refresh)" },
       { "command": "devbox.agents.launch", "title": "Запустить агента", "category": "DevBox", "icon": "$(play)" }
     ],
     "menus": {
       "view/title": [{ "command": "devbox.agents.refresh", "when": "view == devbox.agents", "group": "navigation" }],
-      "view/item/context": [
-        { "command": "devbox.agents.launch", "when": "view == devbox.agents && viewItem == role", "group": "inline" }
-      ],
       "commandPalette": [{ "command": "devbox.agents.launch", "when": "false" }]
     }
   }

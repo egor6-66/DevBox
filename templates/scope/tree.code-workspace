@@ -1,0 +1,8 @@
+{
+  "folders": [
+    { "name": ".devbox", "path": ".devbox" }
+  ],
+  "settings": {
+    "terminal.integrated.tabs.title": "${sequence}"
+  }
+}

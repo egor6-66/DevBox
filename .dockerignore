@@ -1,5 +1,11 @@
-# В образ едут только команда девбокса, её настройки и расширение редактора.
+# В сборку едет только то, из чего она делается.
 *
-!bin
-!etc
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.json
+!build.ts
+!src
 !extension
+!templates
+!etc

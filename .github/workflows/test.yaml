@@ -9,11 +9,23 @@ on:
   workflow_dispatch:
 
 jobs:
+  code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
   image:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # Сборка образа сама собирает код: команду и расширение.
       - name: Собрать образ
         run: docker build -t devbox:dev .
 

@@ -1,0 +1,187 @@
+import { dirname } from "node:path";
+
+import * as vscode from "vscode";
+
+import { type Agent, agentName, launchOf, listAgents } from "../core/agents.ts";
+import { DevboxError } from "../core/errors.ts";
+import { init } from "../core/init.ts";
+import { type Scope, DEFAULT_ROOT, WINDOW_FILE, hasConfigs, resolveScope, windowFile } from "../core/scope.ts";
+
+// Расширение — кнопки поверх ядра. Своей логики у него нет: список агентов, способ запуска и
+// стартовые конфиги те же, что у команды `devbox`.
+//
+// Зачем оно, а не задача редактора: терминалу задачи редактор даёт имя задачи и другого не
+// принимает, а расширение создаёт терминал сразу с именем агента.
+
+// Цвета вкладок — по кругу, в порядке репозиториев.
+const COLORS = ["terminal.ansiGreen", "terminal.ansiBlue", "terminal.ansiMagenta", "terminal.ansiYellow", "terminal.ansiCyan", "terminal.ansiRed"];
+
+// Узел дерева: репозиторий или его роль.
+type Node =
+  | { readonly kind: "repo"; readonly repo: string; readonly color: string; readonly agents: readonly Agent[] }
+  | { readonly kind: "agent"; readonly agent: Agent; readonly color: string };
+
+// Корень скоупа — папка, где лежит файл окна; пока окна нет — открытая папка.
+function currentScope(): Scope {
+  const file = vscode.workspace.workspaceFile;
+
+  if (file !== undefined && file.scheme !== "untitled") return resolveScope(dirname(file.fsPath));
+
+  return resolveScope(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? DEFAULT_ROOT);
+}
+
+const findTerminal = (name: string): vscode.Terminal | undefined =>
+  vscode.window.terminals.find((terminal) => terminal.name === name);
+
+// Аргумент для оболочки: в одинарных кавычках, если в нём есть что-то кроме простых символов.
+const quote = (value: string): string => (/^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`);
+
+class AgentsProvider implements vscode.TreeDataProvider<Node> {
+  readonly #changed = new vscode.EventEmitter<void>();
+  readonly onDidChangeTreeData = this.#changed.event;
+
+  refresh(): void {
+    this.#changed.fire();
+  }
+
+  getChildren(node?: Node): Node[] {
+    if (node?.kind === "agent") return [];
+    if (node?.kind === "repo") return node.agents.map((agent) => ({ kind: "agent", agent, color: node.color }));
+
+    const scope = currentScope();
+    const byRepo = new Map<string, Agent[]>();
+
+    for (const agent of listAgents(scope)) byRepo.set(agent.repo, [...(byRepo.get(agent.repo) ?? []), agent]);
+
+    // Чем встретить человека в пустой панели, решает описание расширения — по этому ключу.
+    void vscode.commands.executeCommand("setContext", "devbox.scope", hasConfigs(scope) ? "ready" : "empty");
+
+    return [...byRepo].map(([repo, agents], index) => ({ kind: "repo", repo, agents, color: COLORS[index % COLORS.length] ?? COLORS[0]! }));
+  }
+
+  getTreeItem(node: Node): vscode.TreeItem {
+    if (node.kind === "repo") {
+      const item = new vscode.TreeItem(node.repo, vscode.TreeItemCollapsibleState.Expanded);
+      item.iconPath = new vscode.ThemeIcon("repo", new vscode.ThemeColor(node.color));
+
+      return item;
+    }
+
+    const running = findTerminal(agentName(node.agent)) !== undefined;
+    const item = new vscode.TreeItem(node.agent.role, vscode.TreeItemCollapsibleState.None);
+    item.iconPath = new vscode.ThemeIcon(running ? "circle-filled" : "circle-outline", new vscode.ThemeColor(node.color));
+    item.description = running ? "запущен" : "";
+    item.tooltip = running ? "Открыт терминал с этим агентом — клик покажет его" : "Запустить агента в новом терминале";
+    item.command = { command: "devbox.agents.launch", title: "Запустить агента", arguments: [node] };
+
+    return item;
+  }
+}
+
+// Один агент — один терминал: повторный клик показывает уже открытый, а не плодит второй.
+function launchAgent(node?: Node): void {
+  if (node?.kind !== "agent") return;
+
+  const launch = launchOf(currentScope(), node.agent);
+  const existing = findTerminal(launch.name);
+
+  if (existing !== undefined) {
+    existing.show();
+
+    return;
+  }
+
+  const terminal = vscode.window.createTerminal({
+    name: launch.name,
+    cwd: launch.cwd,
+    iconPath: new vscode.ThemeIcon("robot"),
+    color: new vscode.ThemeColor(node.color),
+  });
+
+  terminal.show();
+  terminal.sendText([launch.command, ...launch.args].map(quote).join(" "));
+}
+
+// Ключ памяти расширения: «этот скоуп только что создан, после открытия окна скажи, что дальше».
+const JUST_CREATED = "devbox.justCreated";
+
+// Открыта папка скоупа, а не его окно, хотя файл окна есть — открываем окно сами. Редактор при
+// этом перезагружается и дальше помнит окно, так что случается это один раз.
+async function openWindowIfFolder(): Promise<boolean> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+
+  if (vscode.workspace.workspaceFile !== undefined || folder === undefined) return false;
+  if (windowFile(resolveScope(folder.uri.fsPath)) === undefined) return false;
+
+  // Адрес собирается от адреса папки: в контейнере у него своя схема, путём с диска её не получить.
+  await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.joinPath(folder.uri, WINDOW_FILE));
+
+  return true;
+}
+
+async function initScope(context: vscode.ExtensionContext, refresh: () => void): Promise<void> {
+  const scope = currentScope();
+
+  try {
+    const report = init(scope);
+    refresh();
+
+    if (report.created.length === 0) {
+      void vscode.window.showInformationMessage("DevBox: все стартовые конфиги уже на месте.");
+
+      return;
+    }
+
+    // Окно сейчас перезагрузится в скоуп — подсказку «что дальше» покажет уже оно.
+    await context.globalState.update(JUST_CREATED, scope.root);
+
+    if (!(await openWindowIfFolder())) await greetNewScope(context);
+  } catch (error) {
+    if (!(error instanceof DevboxError)) throw error;
+
+    void vscode.window.showErrorMessage(`DevBox: ${error.message}`);
+  }
+}
+
+async function greetNewScope(context: vscode.ExtensionContext): Promise<void> {
+  const scope = currentScope();
+
+  if (context.globalState.get(JUST_CREATED) !== scope.root) return;
+
+  await context.globalState.update(JUST_CREATED, undefined);
+
+  const open = "Открыть mani.yaml";
+  const picked = await vscode.window.showInformationMessage(
+    "DevBox: конфиги скоупа созданы. Впишите репозитории в .devbox/mani.yaml и пересоздайте контейнер (Rebuild Container).",
+    open,
+  );
+
+  if (picked === open) await vscode.window.showTextDocument(vscode.Uri.joinPath(vscode.Uri.file(scope.configDir), "mani.yaml"));
+}
+
+export function activate(context: vscode.ExtensionContext): void {
+  const provider = new AgentsProvider();
+  const refresh = (): void => provider.refresh();
+
+  // Роль добавили или убрали в репозитории, появилась папка конфигов — панель обновляется сама.
+  const watcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(currentScope().root, "{*/.claude/roles/*.json,.devbox}"),
+  );
+
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider("devbox.agents", provider),
+    vscode.commands.registerCommand("devbox.agents.refresh", refresh),
+    vscode.commands.registerCommand("devbox.agents.launch", launchAgent),
+    vscode.commands.registerCommand("devbox.init", () => initScope(context, refresh)),
+    vscode.window.onDidOpenTerminal(refresh),
+    vscode.window.onDidCloseTerminal(refresh),
+    watcher,
+    watcher.onDidCreate(refresh),
+    watcher.onDidDelete(refresh),
+  );
+
+  // Скоуп с файлом окна открыт папкой — переходим в окно; уже в окне — здороваемся, если он новый.
+  void openWindowIfFolder().then((reopening) => (reopening ? undefined : greetNewScope(context)));
+}
+
+export function deactivate(): void {}

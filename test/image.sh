@@ -35,9 +35,9 @@ label() {
   fi
 }
 
-# Команды старта и `devbox link` зовут эти инструменты по имени.
+# Команды старта и команда `devbox` зовут эти инструменты по имени.
 inside "инструменты старта на месте" \
-  'for t in mise pnpm jq yq git; do command -v "$t" >/dev/null || exit 1; done'
+  'for t in mise pnpm git node; do command -v "$t" >/dev/null || exit 1; done'
 
 # mise лежит в образе по постоянному пути: шимы в томе — ссылки на него.
 inside "mise по постоянному пути" 'test -x /usr/local/bin/mise'
@@ -61,28 +61,37 @@ inside "докачка навыков mise выключена" '[ "$(mise settin
 inside "браузера в образе нет, флаг для него на месте" \
   '! command -v chromium >/dev/null && grep -q -- "--no-sandbox" /etc/chromium.d/devbox-no-sandbox'
 
-# Ручной линк на пакеты соседа: команда девбокса и разборщик её конфига.
-inside "команда devbox и yq на месте" 'command -v yq >/dev/null && devbox --help | grep -q "devbox unlink"'
+# Команда девбокса: собрана, запускается, знает свои команды.
+inside "команда devbox на месте" 'devbox --help | grep -q "devbox init" && devbox --help | grep -q "devbox unlink"'
 inside "devbox без конфига линков говорит об этом, а не падает молча" \
   'devbox link 2>&1 | grep -q "нет конфига линков"'
+
+# Новый скоуп пуст, и человеку не с чего начать: init раскладывает стартовые конфиги и ссылки,
+# повторный запуск ничего не трогает. Разложенное обязано читаться инструментами, для которых оно.
+inside "devbox init раскладывает стартовые конфиги в пустом скоупе" \
+  'cd /workspaces/tree && devbox init >/dev/null && test -f .devbox/mise.toml -a -f .devbox/mani.yaml -a -f .devbox/links.yaml -a -f tree.code-workspace && test "$(readlink .mcp.json)" = .devbox/mcp.json && test "$(readlink .devbox/tree.code-workspace)" = ../tree.code-workspace && devbox init | grep -q "уже на месте"'
+# Без сети: проверка, которая ходит за версиями инструментов, сама съедает часовой лимит GitHub.
+inside "стартовые конфиги читаются: JSON разбирается, mise видит свой файл" \
+  'cd /workspaces/tree && devbox init >/dev/null && node -e "for (const f of [\".mcp.json\", \".devbox/.vscode/tasks.json\", \"tree.code-workspace\"]) JSON.parse(require(\"fs\").readFileSync(f, \"utf8\"))" && mise config ls 2>/dev/null | grep -q "mise.toml.*mani"'
 
 # Метку читает редактор: битый JSON или пропавшая команда — и среда молча не поднимается.
 meta="$($docker image inspect "$image" --format '{{ index .Config.Labels "devcontainer.metadata" }}' 2>/dev/null)"
 label "метка: пользователь node" '.[0].remoteUser == "node" and .[0].containerUser == "node"'
-label "метка: при создании — mise install" '.[0].postCreateCommand == "mise install"'
+
 # Расширение девбокса едет в образе файлом, и редактору оно названо путём к этому файлу.
 inside "расширение девбокса лежит в образе" 'test -s /usr/local/share/devbox/devbox.vsix'
 label "метка: редактору названо расширение девбокса" \
   '.[0].customizations.vscode.extensions | index("/usr/local/share/devbox/devbox.vsix") != null'
 
-# При подключении образ делает одно — приводит репозитории к конфигу. Расширения ставит редактор по
-# списку из devcontainer.json человека, библиотеки и свои скрипты запускает человек.
-label "метка: при подключении — только репозитории, и только если есть их конфиг" \
-  '.[0].postAttachCommand == "test ! -f \"$MANI_CONFIG\" || mani sync --sync-gitignore=false --sync-remotes"'
+# При подключении образ делает два дела родными командами: ставит инструменты и приводит
+# репозитории к конфигу. Расширения ставит редактор, библиотеки и свои скрипты запускает человек.
+attach='mise install && { test ! -f "$MANI_CONFIG" || mani sync --sync-gitignore=false --sync-remotes; }'
+label "метка: при подключении — инструменты, затем репозитории, если есть их конфиг" \
+  ".[0].postAttachCommand == $(printf '%s' "$attach" | jq -Rs .)"
+label "метка: при создании контейнера образ ничего не запускает" '.[0] | has("postCreateCommand") | not'
 
-# Новый скоуп пуст: ни конфигов, ни инструментов. Обе команды старта обязаны пройти и на нём.
-inside "пустой скоуп: команды старта проходят без ошибок" \
-  'cd /workspaces/tree && mise install >/dev/null 2>&1 && { test ! -f "$MANI_CONFIG" || mani sync --sync-gitignore=false --sync-remotes; }'
+# Новый скоуп пуст: ни конфигов, ни инструментов. Команда старта обязана пройти и на нём.
+inside "пустой скоуп: команда старта проходит без ошибок" "cd /workspaces/tree && $attach"
 
 if [ "$failed" -ne 0 ]; then
   echo "[проверки] образ $image не прошёл"
