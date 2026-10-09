@@ -27,7 +27,7 @@ function runnerWith(pnpmCode = 0): Runner & { installs: string[] } {
     pipe: systemRunner.pipe,
     passthrough(command, args, cwd) {
       assert.equal(command, "pnpm");
-      assert.deepEqual(args, ["install"]);
+      assert.deepEqual(args, ["install", "--config.confirmModulesPurge=false"]);
       installs.push(cwd);
       // Настоящий pnpm при установке приводит lock-файл к настройкам: стоят ссылки — переписывает
       // его под них, ссылок нет — lock остаётся каким был.

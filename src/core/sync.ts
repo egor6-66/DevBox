@@ -1,6 +1,7 @@
 import { DevboxError } from "./errors.ts";
 import type { Runner } from "./process.ts";
 import { readRepos, reposFile } from "./repos.ts";
+import { type InstructionsReport, syncInstructions } from "./instructions.ts";
 import { type Scope, hasConfigs } from "./scope.ts";
 import { type ClaudeLayout, type LayoutReport, claudeLayoutFromEnv, layoutClaude } from "./volumes.ts";
 import { type WindowReport, syncWindow } from "./window.ts";
@@ -19,6 +20,8 @@ export interface SyncReport {
   readonly window: WindowReport;
   // Раскладка папки Claude Code по томам; вне образа её нет.
   readonly claude?: LayoutReport;
+  // Указания агентам в корне скоупа; в пустом скоупе их нет.
+  readonly instructions?: InstructionsReport;
 }
 
 // Раскладка томов приходит аргументом: по умолчанию её задаёт образ, а проверки передают свою или
@@ -36,6 +39,9 @@ export function sync(scope: Scope, runner: Runner, layout: ClaudeLayout | undefi
   // кнопкой «Создать конфиги».
   if (!hasConfigs(scope)) return { window: { folders: [], added: [], removed: [] }, claude };
 
+  // Указания агентам — до клонирования: они не зависят от сети и нужны, даже если оно споткнётся.
+  const instructions = syncInstructions(scope);
+
   // Репозиториев в конфиге нет — mani не зовём: клонировать нечего, а самого mani может ещё не
   // быть (его ставит mise, если он назван в `mise.toml`).
   const cloned =
@@ -47,5 +53,5 @@ export function sync(scope: Scope, runner: Runner, layout: ClaudeLayout | undefi
 
   if (!cloned) throw new DevboxError("не все репозитории склонировались — см. вывод mani выше. Окно приведено к тому, что есть на диске.");
 
-  return { window, claude };
+  return { window, claude, instructions };
 }

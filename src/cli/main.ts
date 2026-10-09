@@ -50,7 +50,10 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   },
 
   sync(scope) {
-    const { window, claude } = sync(scope, systemRunner);
+    const { window, claude, instructions } = sync(scope, systemRunner);
+
+    if (instructions === "written") say("указания агентам обновлены: CLAUDE.md в корне скоупа");
+    if (instructions === "foreign") say("CLAUDE.md в корне скоупа положил не девбокс — не тронут; указания агентам туда не попали");
 
     for (const name of claude?.kept ?? []) say(`папка Claude Code «${name}» уже с содержимым — оставлена в томе инструментов`);
     for (const name of window.added) say(`в окно добавлена папка ${name}`);

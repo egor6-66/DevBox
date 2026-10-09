@@ -32,6 +32,11 @@ export const LINKS_FILE = "links.yaml";
 
 // Файлы приложения, которые линк меняет и откатывает.
 const TOUCHED = ["pnpm-workspace.yaml", "pnpm-lock.yaml"] as const;
+
+// Установка без вопросов. Когда pnpm решает пересоздать `node_modules` (сменился стор, раскладка),
+// он спрашивает согласия у терминала, а без терминала обрывается, — так линк падал у агента
+// (найдено живьём 2026-10-09). `node_modules` восстановим, спрашивать тут не о чем.
+const INSTALL = ["install", "--config.confirmModulesPurge=false"] as const;
 const WORKSPACE_FILE = TOUCHED[0];
 
 // Отметка «прилинковано мной» лежит в `.git` клона: наружу она не уезжает, а без неё чужие
@@ -97,7 +102,7 @@ export function link(scope: Scope, app: string, runner: Runner): Linked[] {
 
   writeOverrides(dir, linked);
 
-  if (runner.passthrough("pnpm", ["install"], dir) !== 0) {
+  if (runner.passthrough("pnpm", INSTALL, dir) !== 0) {
     throw new DevboxError(`${app}: установка не прошла. Ссылки записаны; откатить — devbox unlink ${app}`);
   }
 
@@ -115,7 +120,7 @@ export function unlink(scope: Scope, app: string, runner: Runner): void {
 
   restore(dir, mark, runner);
 
-  if (runner.passthrough("pnpm", ["install"], dir) !== 0) {
+  if (runner.passthrough("pnpm", INSTALL, dir) !== 0) {
     throw new DevboxError(
       `${app}: файлы возвращены, но установка из реестра не прошла — в node_modules остались прежние ссылки. Повторите pnpm install, когда реестр будет доступен.`,
     );

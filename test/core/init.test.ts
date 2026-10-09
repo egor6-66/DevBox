@@ -21,6 +21,7 @@ test("пустой скоуп получает стартовый набор и 
 
   assert.deepEqual([...report.created].sort(), [
     ".devbox/.vscode/tasks.json",
+    ".devbox/agents.md",
     ".devbox/links.yaml",
     ".devbox/mani.yaml",
     ".devbox/mcp.json",

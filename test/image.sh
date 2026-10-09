@@ -63,6 +63,8 @@ inside "применение конфигов уводит сессии и кэ�
 
 # Слепок скоупа: образ знает свою версию и папку окна на хосте; без этой папки — понятный отказ.
 inside "образ знает свою версию и папку окна на хосте" '[ -n "$DEVBOX_IMAGE" ] && [ "$DEVBOX_HOST_DIR" = /home/node/.host ] && [ "$(stat -c %U /home/node/.host)" = node ]'
+inside "применение конфигов кладёт указания агентам в корень скоупа" \
+  'cd /workspaces/tree && devbox init >/dev/null && devbox sync >/dev/null 2>&1; grep -q "devbox link" CLAUDE.md && grep -q "не коммить" CLAUDE.md && test -f .devbox/agents.md'
 inside "age есть в образе: слепок под паролем открывается до появления конфигов" 'command -v age >/dev/null'
 inside "слепок без папки хоста — отказ с подсказкой, какую строку добавить" \
   'cd /workspaces/tree && devbox init >/dev/null && devbox snapshot export --open 2>&1 | grep -q "localWorkspaceFolder"'
