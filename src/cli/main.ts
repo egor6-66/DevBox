@@ -43,8 +43,9 @@ const COMMANDS: Readonly<Record<string, Command>> = {
   },
 
   sync(scope) {
-    const { window } = sync(scope, systemRunner);
+    const { window, claude } = sync(scope, systemRunner);
 
+    for (const name of claude?.kept ?? []) say(`папка Claude Code «${name}» уже с содержимым — оставлена в томе инструментов`);
     for (const name of window.added) say(`в окно добавлена папка ${name}`);
     for (const name of window.removed) say(`из окна убрана папка ${name}`);
     say("конфиги применены");

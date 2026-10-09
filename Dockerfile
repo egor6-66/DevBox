@@ -39,13 +39,29 @@ RUN chmod +x /usr/local/bin/devbox
 # 2026-10-08. Остаётся её же папка флагов.
 COPY etc/chromium.d/devbox-no-sandbox /etc/chromium.d/devbox-no-sandbox
 
-# Креды и кэши — ПУТИ, по которым человек монтирует свои тома. Сами тома образ не объявляет.
-ENV CLAUDE_CONFIG_DIR=/home/node/.secrets/claude \
-    GIT_CONFIG_GLOBAL=/home/node/.secrets/gitconfig \
+# Три тома — три смысла, и смешивать их нельзя. Образ называет только ПУТИ, по которым человек
+# монтирует свои тома; сами тома он не объявляет.
+#
+#   /home/node/.secrets   СЕКРЕТЫ: только ключи, входы и переменные. Маленький том — он и есть то,
+#                         что уезжает на другую машину «пакетом секретов».
+#   /home/node/.tools     ИНСТРУМЕНТЫ: программы, их плагины и настройки.
+#   /home/node/.store     КЭШ: сессии и кэш — тяжёлое и восстановимое.
+#
+# Claude Code держит всё своё в одной папке, и раньше она целиком стояла в томе секретов: рядом с
+# ключами копился гигабайт истории и кэша. Теперь папка — в томе инструментов (настройки, плагины,
+# навыки); сессии и кэш уведены в том кэша ссылками на папки (`src/core/volumes.ts`); входа в ней
+# нет вовсе — он задан секретной переменной `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`),
+# штатным способом. Проверено живьём 2026-10-09: без файла входа, с токеном из секретов и с
+# папками-ссылками Claude Code работает.
+#
+# Настройки git — тоже настройки: в томе инструментов.
+ENV CLAUDE_CONFIG_DIR=/home/node/.tools/claude \
+    GIT_CONFIG_GLOBAL=/home/node/.tools/gitconfig \
     GH_CONFIG_DIR=/home/node/.secrets/gh \
     NPM_CONFIG_USERCONFIG=/home/node/.secrets/npmrc \
-    NPM_CONFIG_STORE_DIR=/home/node/.pnpm-store \
-    PNPM_CONFIG_STORE_DIR=/home/node/.pnpm-store \
+    DEVBOX_STORE_DIR=/home/node/.store \
+    NPM_CONFIG_STORE_DIR=/home/node/.store/pnpm \
+    PNPM_CONFIG_STORE_DIR=/home/node/.store/pnpm \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 # Инструменты живут в томе, а не в контейнере: mise держит поставленное на точке монтирования, его
@@ -78,7 +94,7 @@ RUN echo 'command -v fnox >/dev/null 2>&1 && eval "$(fnox activate bash)"' >> /e
 # Точки монтирования готовятся ЗДЕСЬ, и это не перестраховка: пустой том docker наполняет
 # содержимым и правами того каталога, на который его смонтировали. Каталога нет — том достаётся
 # root'у, и первая же запись от пользователя отказывает.
-RUN mkdir -p /home/node/.secrets /home/node/.tools /home/node/.pnpm-store /workspaces/tree \
+RUN mkdir -p /home/node/.secrets /home/node/.tools /home/node/.store /workspaces/tree \
     && chown -R node:node /home/node /workspaces
 
 # Настройки контейнера едут В ОБРАЗЕ: редактор читает их метаданными и сливает со своим файлом,

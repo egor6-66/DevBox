@@ -46,12 +46,20 @@ inside "шимы первыми в PATH" 'case "$PATH" in /home/node/.tools/mise
 # Пустой том docker наполняет правами каталога, на который его смонтировали: каталог не
 # принадлежит пользователю — первая же запись отказывает.
 inside "точки монтирования принадлежат пользователю" \
-  'for d in /home/node/.secrets /home/node/.tools /home/node/.pnpm-store /workspaces/tree; do [ "$(stat -c %U "$d")" = node ] || exit 1; done'
+  'for d in /home/node/.secrets /home/node/.tools /home/node/.store /workspaces/tree; do [ "$(stat -c %U "$d")" = node ] || exit 1; done'
 
 inside "путь к конфигу mise" '[ "$MISE_GLOBAL_CONFIG_FILE" = /workspaces/tree/.devbox/mise.toml ]'
 inside "путь к конфигу mani" '[ "$MANI_CONFIG" = /workspaces/tree/.devbox/mani.yaml ]'
 inside "путь к конфигу fnox" '[ "$FNOX_CONFIG_DIR" = /workspaces/tree/.devbox/fnox ]'
 inside "путь к ключу age" '[ "$FNOX_AGE_KEY_FILE" = /home/node/.secrets/age.txt ]'
+
+# Три тома — три смысла: в секретах только ключи и входы, настройки и плагины — в инструментах,
+# сессии и кэш — в кэше. Папка Claude Code стоит в инструментах, а не рядом с ключами.
+inside "том секретов — только для секретов: папка Claude и настройки git в нём не стоят" \
+  '[ "$CLAUDE_CONFIG_DIR" = /home/node/.tools/claude ] && [ "$GIT_CONFIG_GLOBAL" = /home/node/.tools/gitconfig ] && [ "$GH_CONFIG_DIR" = /home/node/.secrets/gh ] && [ "$NPM_CONFIG_USERCONFIG" = /home/node/.secrets/npmrc ]'
+inside "кэш pnpm — в томе кэша" '[ "$PNPM_CONFIG_STORE_DIR" = /home/node/.store/pnpm ] && [ "$DEVBOX_STORE_DIR" = /home/node/.store ]'
+inside "применение конфигов уводит сессии и кэш Claude Code в том кэша" \
+  'cd /workspaces/tree && devbox sync >/dev/null && [ "$(readlink /home/node/.tools/claude/projects)" = /home/node/.store/claude/projects ] && [ "$(readlink /home/node/.tools/claude/cache)" = /home/node/.store/claude/cache ] && test -d /home/node/.store/claude/projects && test -z "$(ls -A /home/node/.secrets)"'
 
 # Докачка навыков ходит в GitHub мимо сервера версий и при исчерпанном лимите валит весь старт.
 inside "докачка навыков mise выключена" '[ "$(mise settings get skills.fetch 2>/dev/null)" = false ]'

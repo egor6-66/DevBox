@@ -49,7 +49,7 @@ test("по порядку: инструменты, репозитории сво
   const scope = scopeWith(MANI);
   const runner = runnerWith();
 
-  const report = sync(scope, runner);
+  const report = sync(scope, runner, undefined);
 
   assert.deepEqual(runner.calls, [
     "mise install",
@@ -63,7 +63,7 @@ test("пустой скоуп остаётся пустым: mani не зовё�
   const scope = scopeWith();
   const runner = runnerWith();
 
-  sync(scope, runner);
+  sync(scope, runner, undefined);
 
   assert.deepEqual(runner.calls, ["mise install"]);
   assert.deepEqual(readdirSync(scope.root), []);
@@ -75,7 +75,7 @@ test("репозиториев в конфигах нет — mani не зовё
     mkdirSync(scope.configDir, { recursive: true });
     const runner = runnerWith();
 
-    sync(scope, runner);
+    sync(scope, runner, undefined);
 
     assert.deepEqual(runner.calls, ["mise install"]);
     assert.deepEqual(foldersOf(scope), [".devbox"]);
@@ -86,13 +86,24 @@ test("инструменты не поставились — отказ, реп�
   const scope = scopeWith(MANI);
   const runner = runnerWith({ mise: 1 });
 
-  assert.throws(() => sync(scope, runner), (error: unknown) => error instanceof DevboxError && /инструменты не поставились/.test(error.message));
+  assert.throws(() => sync(scope, runner, undefined), (error: unknown) => error instanceof DevboxError && /инструменты не поставились/.test(error.message));
   assert.deepEqual(runner.calls, ["mise install"]);
 });
 
 test("клонирование споткнулось — окно всё равно приведено к диску, а итог — отказ", () => {
   const scope = scopeWith(MANI);
 
-  assert.throws(() => sync(scope, runnerWith({ mani: 1 })), (error: unknown) => error instanceof DevboxError && /не все репозитории склонировались/.test(error.message));
+  assert.throws(() => sync(scope, runnerWith({ mani: 1 }), undefined), (error: unknown) => error instanceof DevboxError && /не все репозитории склонировались/.test(error.message));
   assert.deepEqual(foldersOf(scope), [".devbox"]);
+});
+
+test("раскладка томов идёт первой и не зависит от конфигов скоупа", () => {
+  const scope = scopeWith();
+  const volumes = mkdtempSync(join(tmpdir(), "devbox-sync-volumes-"));
+  const layout = { config: join(volumes, "tools", "claude"), store: join(volumes, "store", "claude") };
+
+  const report = sync(scope, runnerWith(), layout);
+
+  assert.ok(report.claude !== undefined && report.claude.linked.includes("projects"));
+  assert.deepEqual(readdirSync(scope.root), []);
 });
