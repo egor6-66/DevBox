@@ -1,0 +1,7 @@
+{
+  "$comment": "Настройки репозитория для агент-сессий. Роль-модель (роли, опознание сессии, проверки коммита) приезжает плагином `harness`; зоны и пины моделей объявляет `harness.yaml` рядом. Границы правки — в файлах роли (`.claude/roles/<роль>.json`), и сессия стартует с нужным: `claude --settings .claude/roles/main.json`. Здесь только то, что верно для ЛЮБОЙ роли.",
+  "extraKnownMarketplaces": {
+    "omnifield": { "source": { "source": "github", "repo": "egor6-66/harness" } }
+  },
+  "enabledPlugins": { "harness@omnifield": true }
+}
