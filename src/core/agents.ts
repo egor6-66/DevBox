@@ -24,6 +24,8 @@ export interface Launch {
 
 const ROLES_DIR = join(".claude", "roles");
 const ROLE_SUFFIX = ".json";
+// Конфиг MCP скоупа — тот же, что по ссылке `.mcp.json` в корне скоупа.
+const MCP_FILE = "mcp.json";
 
 const roleFile = (role: string): string => join(ROLES_DIR, `${role}${ROLE_SUFFIX}`);
 
@@ -58,13 +60,18 @@ export function findAgent(scope: Scope, repo: string, role: string): Agent {
   return { repo, role };
 }
 
+// MCP скоупа подаётся файлом, а не находится по ссылке `.mcp.json`: найденный так конфиг Claude Code
+// подтверждает на каждый репозиторий отдельно, а отказ запоминает в его `.claude/settings.local.json`
+// — после одного «не доверять» серверы в этом репозитории пропадают молча. Файл по `--mcp-config`
+// грузится всегда; ссылка в корне остаётся для `claude`, запущенного руками.
 export function launchOf(scope: Scope, agent: Agent): Launch {
   const name = agentName(agent);
+  const mcp = join(scope.configDir, MCP_FILE);
 
   return {
     name,
     cwd: join(scope.root, agent.repo),
     command: "claude",
-    args: ["--settings", roleFile(agent.role), "-n", name],
+    args: ["--settings", roleFile(agent.role), "-n", name, ...(existsSync(mcp) ? ["--mcp-config", mcp] : [])],
   };
 }

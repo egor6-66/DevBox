@@ -53,6 +53,16 @@ test("запуск: папка репозитория, файл роли и им
   assert.equal(agentName({ repo: "statboard", role: "main" }), launch.name);
 });
 
+test("есть конфиг MCP скоупа — агент получает его файлом, минуя подтверждение по репозиторию", () => {
+  const scope = scopeWith({ statboard: ["main"] });
+  mkdirSync(scope.configDir, { recursive: true });
+  writeFileSync(join(scope.configDir, "mcp.json"), "{}");
+
+  const launch = launchOf(scope, findAgent(scope, "statboard", "main"));
+
+  assert.deepEqual(launch.args.slice(-2), ["--mcp-config", join(scope.configDir, "mcp.json")]);
+});
+
 test("несуществующая роль — отказ с путём, где её искали", () => {
   const scope = scopeWith({ statboard: ["main"] });
 
