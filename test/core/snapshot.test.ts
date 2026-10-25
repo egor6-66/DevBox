@@ -22,6 +22,7 @@ const CONTAINER = `{
     "source=old-secrets,target=/home/node/.secrets,type=volume",
     "source=old-tools,target=/home/node/.tools,type=volume",
     "source=old-store,target=/home/node/.store,type=volume",
+    "source=old-data,target=/home/node/.data,type=volume",
     "source=other,target=/data,type=volume"
   ]
 }
@@ -133,6 +134,7 @@ test("devcontainer.json слепка: точная версия образа, т
     "source=${localWorkspaceFolderBasename}-secrets,target=/home/node/.secrets,type=volume",
     "source=${localWorkspaceFolderBasename}-tools,target=/home/node/.tools,type=volume",
     "source=${localWorkspaceFolderBasename}-store,target=/home/node/.store,type=volume",
+    "source=${localWorkspaceFolderBasename}-data,target=/home/node/.data,type=volume",
     "source=other,target=/data,type=volume",
     HOST_MOUNT,
   ]);

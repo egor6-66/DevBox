@@ -21,6 +21,7 @@
     "source=devbox-secrets,target=/home/node/.secrets,type=volume",
     "source=devbox-tools,target=/home/node/.tools,type=volume",
     "source=devbox-store,target=/home/node/.store,type=volume",
+    "source=devbox-data,target=/home/node/.data,type=volume",
     "source=${localWorkspaceFolder},target=/home/node/.host,type=bind"
   ],
   "customizations": {
@@ -44,9 +45,14 @@
 | секреты | `/home/node/.secrets` | только ключи, входы и переменные: ключ age, вход `gh`, токен npm |
 | инструменты | `/home/node/.tools` | программы от mise, их плагины и настройки: папка Claude Code, настройки git |
 | кэш | `/home/node/.store` | сессии и кэш: сессии Claude Code, кэш pnpm |
+| данные | `/home/node/.data` | базы данных скоупа: у каждой своя папка, например `pg/neurobox` |
 
 Три тома — три смысла, и смешивать их нельзя. Том секретов маленький: в нём нет ни истории, ни
 кэша, поэтому его можно перенести на другую машину целиком.
+
+Том данных — не кэш: выбросить его нельзя. Но в слепок он не едет: на новом месте базу поднимают
+миграции, а при переносе скоупа в другую папку слепок назовёт и этот том по новой папке — две копии
+скоупа не сядут на одну базу.
 
 Тома образ не объявляет намеренно: их называет человек, и это его состояние.
 

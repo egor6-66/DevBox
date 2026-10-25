@@ -41,6 +41,7 @@ const VOLUMES: Readonly<Record<string, string>> = {
   "/home/node/.secrets": "secrets",
   "/home/node/.tools": "tools",
   "/home/node/.store": "store",
+  "/home/node/.data": "data",
 };
 
 const SECRETS_PREFIX = "secrets/";

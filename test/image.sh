@@ -46,7 +46,9 @@ inside "шимы первыми в PATH" 'case "$PATH" in /home/node/.tools/mise
 # Пустой том docker наполняет правами каталога, на который его смонтировали: каталог не
 # принадлежит пользователю — первая же запись отказывает.
 inside "точки монтирования принадлежат пользователю" \
-  'for d in /home/node/.secrets /home/node/.tools /home/node/.store /workspaces/tree; do [ "$(stat -c %U "$d")" = node ] || exit 1; done'
+  'for d in /home/node/.secrets /home/node/.tools /home/node/.store /home/node/.data /workspaces/tree; do [ "$(stat -c %U "$d")" = node ] || exit 1; done'
+
+inside "том данных назван переменной" '[ "$DEVBOX_DATA_DIR" = /home/node/.data ]'
 
 inside "путь к конфигу mise" '[ "$MISE_GLOBAL_CONFIG_FILE" = /workspaces/tree/.devbox/mise.toml ]'
 inside "путь к конфигу mani" '[ "$MANI_CONFIG" = /workspaces/tree/.devbox/mani.yaml ]'

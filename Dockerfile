@@ -45,13 +45,16 @@ RUN chmod +x /usr/local/bin/devbox
 # 2026-10-08. Остаётся её же папка флагов.
 COPY etc/chromium.d/devbox-no-sandbox /etc/chromium.d/devbox-no-sandbox
 
-# Три тома — три смысла, и смешивать их нельзя. Образ называет только ПУТИ, по которым человек
+# Четыре тома — четыре смысла, и смешивать их нельзя. Образ называет только ПУТИ, по которым человек
 # монтирует свои тома; сами тома он не объявляет.
 #
 #   /home/node/.secrets   СЕКРЕТЫ: только ключи, входы и переменные. Маленький том — он и есть то,
 #                         что уезжает на другую машину «пакетом секретов».
 #   /home/node/.tools     ИНСТРУМЕНТЫ: программы, их плагины и настройки.
 #   /home/node/.store     КЭШ: сессии и кэш — тяжёлое и восстановимое.
+#   /home/node/.data      ДАННЫЕ: базы данных скоупа, у каждой своя папка (`pg/neurobox`).
+#                         Не кэш — выбросить нельзя; но и не секреты — в слепок не едут, на новом
+#                         месте базу поднимают миграции.
 #
 # Claude Code держит всё своё в одной папке, и раньше она целиком стояла в томе секретов: рядом с
 # ключами копился гигабайт истории и кэша. Теперь папка — в томе инструментов (настройки, плагины,
@@ -66,6 +69,7 @@ ENV CLAUDE_CONFIG_DIR=/home/node/.tools/claude \
     GH_CONFIG_DIR=/home/node/.secrets/gh \
     NPM_CONFIG_USERCONFIG=/home/node/.secrets/npmrc \
     DEVBOX_STORE_DIR=/home/node/.store \
+    DEVBOX_DATA_DIR=/home/node/.data \
     NPM_CONFIG_STORE_DIR=/home/node/.store/pnpm \
     PNPM_CONFIG_STORE_DIR=/home/node/.store/pnpm \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0
@@ -100,7 +104,7 @@ RUN echo 'command -v fnox >/dev/null 2>&1 && eval "$(fnox activate bash)"' >> /e
 # Точки монтирования готовятся ЗДЕСЬ, и это не перестраховка: пустой том docker наполняет
 # содержимым и правами того каталога, на который его смонтировали. Каталога нет — том достаётся
 # root'у, и первая же запись от пользователя отказывает.
-RUN mkdir -p /home/node/.secrets /home/node/.tools /home/node/.store /home/node/.host /workspaces/tree \
+RUN mkdir -p /home/node/.secrets /home/node/.tools /home/node/.store /home/node/.data /home/node/.host /workspaces/tree \
     && chown -R node:node /home/node /workspaces
 
 # Настройки контейнера едут В ОБРАЗЕ: редактор читает их метаданными и сливает со своим файлом,
