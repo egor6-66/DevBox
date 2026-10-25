@@ -54,9 +54,13 @@ inside "путь к конфигу mise" '[ "$MISE_GLOBAL_CONFIG_FILE" = /worksp
 inside "путь к конфигу mani" '[ "$MANI_CONFIG" = /workspaces/tree/.devbox/mani.yaml ]'
 inside "путь к конфигу fnox" '[ "$FNOX_CONFIG_DIR" = /workspaces/tree/.devbox/fnox ]'
 inside "путь к ключу age" '[ "$FNOX_AGE_KEY_FILE" = /home/node/.secrets/age.txt ]'
-# Секреты нужны не только терминалу: задача редактора — это `/bin/bash -c`, без приглашения.
-inside "неинтерактивный bash подхватывает секреты" \
-  '[ "$BASH_ENV" = /etc/devbox/secrets.sh ] && test -r /etc/devbox/secrets.sh && bash -n /etc/devbox/secrets.sh'
+# Окружение скоупа нужно не только терминалу: задача редактора — это `/bin/bash -c`, без
+# приглашения. Секреты и `[env]` mise идут одним файлом из BASH_ENV; `[env]` проверяется вживую —
+# шимы его самому bash не дают, и ловилось это только запуском.
+inside "неинтерактивный bash подхватывает окружение скоупа" \
+  '[ "$BASH_ENV" = /etc/devbox/env.sh ] && test -r /etc/devbox/env.sh && bash -n /etc/devbox/env.sh'
+inside "переменные из [env] mise.toml видны в bash: в задаче и в терминале" \
+  'cd /workspaces/tree && mkdir -p .devbox && printf "[env]\nDEVBOX_PROBE = \"ok\"\n" > .devbox/mise.toml && bash -c "echo [\$DEVBOX_PROBE]" | grep -q "\[ok\]" && bash -ic "echo [\$DEVBOX_PROBE]" 2>/dev/null | grep -q "\[ok\]"'
 
 # Три тома — три смысла: в секретах только ключи и входы, настройки и плагины — в инструментах,
 # сессии и кэш — в кэше. Папка Claude Code стоит в инструментах, а не рядом с ключами.

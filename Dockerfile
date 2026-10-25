@@ -96,18 +96,23 @@ ENV MANI_CONFIG=/workspaces/tree/.devbox/mani.yaml
 # Секреты — fnox: конфиг с шифртекстом лежит в папке конфигов скоупа как ОБЩИЙ (`config.toml` в
 # FNOX_CONFIG_DIR — другого способа назвать путь у fnox нет), ключ age — в томе секретов.
 # Значение задаётся с флагом `-g`: без него fnox заводит отдельный `fnox.toml` в текущей папке.
-# Значения подаются в окружение любого bash скоупа, двумя путями:
-#  · терминал (интерактивный) — активация fnox в `/etc/bash.bashrc`: хук на приглашение, секреты
-#    обновляются по ходу работы;
-#  · неинтерактивный bash — задачи редактора (`/bin/bash -c …`), скрипты, команды агентов — файл из
-#    BASH_ENV. До активации он не доходит: `bash.bashrc` для него выходит в первой же строке, а
-#    приглашения, на котором сработал бы хук, нет. Ловилось живьём 2026-10-25: `dev.sh` задачей
-#    редактора падал без DATABASE_URL, в терминале работал.
 ENV FNOX_CONFIG_DIR=/workspaces/tree/.devbox/fnox \
-    FNOX_AGE_KEY_FILE=/home/node/.secrets/age.txt \
-    BASH_ENV=/etc/devbox/secrets.sh
-RUN echo 'command -v fnox >/dev/null 2>&1 && eval "$(fnox activate bash)"' >> /etc/bash.bashrc
-COPY etc/devbox/secrets.sh /etc/devbox/secrets.sh
+    FNOX_AGE_KEY_FILE=/home/node/.secrets/age.txt
+
+# Окружение скоупа — переменные из `[env]` в `mise.toml` (например PGDATA) и секреты fnox — подаётся
+# в любой bash скоупа, двумя путями:
+#  · терминал (интерактивный) — `/etc/bash.bashrc`: переменные mise выгружаются один раз, секреты —
+#    активацией fnox, хуком на приглашение, и обновляются по ходу работы;
+#  · неинтерактивный bash — задачи редактора (`/bin/bash -c …`), скрипты, команды агентов — файл из
+#    BASH_ENV. До `bash.bashrc` он не доходит: тот для него выходит в первой же строке, а
+#    приглашения, на котором сработал бы хук, нет.
+# Шимы mise в PATH переменных `[env]` самому bash не дают — только инструменту, запущенному через
+# шим. Ловилось живьём 2026-10-25: `dev.sh` в neurobox задачей редактора падал сперва без
+# DATABASE_URL (секрет), затем без PGDATA (`[env]` mise) — и не поднимал Postgres.
+ENV BASH_ENV=/etc/devbox/env.sh
+RUN echo 'command -v mise >/dev/null 2>&1 && eval "$(MISE_AUTO_INSTALL=false mise env -s bash 2>/dev/null)"' >> /etc/bash.bashrc \
+    && echo 'command -v fnox >/dev/null 2>&1 && eval "$(fnox activate bash)"' >> /etc/bash.bashrc
+COPY etc/devbox/env.sh /etc/devbox/env.sh
 
 # Точки монтирования готовятся ЗДЕСЬ, и это не перестраховка: пустой том docker наполняет
 # содержимым и правами того каталога, на который его смонтировали. Каталога нет — том достаётся

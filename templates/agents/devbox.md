@@ -11,6 +11,7 @@
 | какие репозитории в скоупе | `.devbox/mani.yaml` | `devbox sync` |
 | какие инструменты и их версии | `.devbox/mise.toml` | `devbox sync` |
 | секреты и переменные | `fnox set -g ИМЯ` (шифртекст в `.devbox/fnox/config.toml`) | новый терминал |
+| несекретные переменные | секция `[env]` в `.devbox/mise.toml` | новый терминал |
 | MCP-серверы | `.devbox/mcp.json` | перезапуск агента |
 | какие пакеты соседа линковать | `.devbox/links.yaml` | `devbox link <приложение>` |
 | скрипты скоупа | `.devbox/.vscode/tasks.json` | — |
