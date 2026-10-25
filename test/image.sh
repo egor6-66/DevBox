@@ -54,6 +54,9 @@ inside "путь к конфигу mise" '[ "$MISE_GLOBAL_CONFIG_FILE" = /worksp
 inside "путь к конфигу mani" '[ "$MANI_CONFIG" = /workspaces/tree/.devbox/mani.yaml ]'
 inside "путь к конфигу fnox" '[ "$FNOX_CONFIG_DIR" = /workspaces/tree/.devbox/fnox ]'
 inside "путь к ключу age" '[ "$FNOX_AGE_KEY_FILE" = /home/node/.secrets/age.txt ]'
+# Секреты нужны не только терминалу: задача редактора — это `/bin/bash -c`, без приглашения.
+inside "неинтерактивный bash подхватывает секреты" \
+  '[ "$BASH_ENV" = /etc/devbox/secrets.sh ] && test -r /etc/devbox/secrets.sh && bash -n /etc/devbox/secrets.sh'
 
 # Три тома — три смысла: в секретах только ключи и входы, настройки и плагины — в инструментах,
 # сессии и кэш — в кэше. Папка Claude Code стоит в инструментах, а не рядом с ключами.

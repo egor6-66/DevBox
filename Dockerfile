@@ -96,10 +96,18 @@ ENV MANI_CONFIG=/workspaces/tree/.devbox/mani.yaml
 # Секреты — fnox: конфиг с шифртекстом лежит в папке конфигов скоупа как ОБЩИЙ (`config.toml` в
 # FNOX_CONFIG_DIR — другого способа назвать путь у fnox нет), ключ age — в томе секретов.
 # Значение задаётся с флагом `-g`: без него fnox заводит отдельный `fnox.toml` в текущей папке.
-# В терминале значения подаёт его активация.
+# Значения подаются в окружение любого bash скоупа, двумя путями:
+#  · терминал (интерактивный) — активация fnox в `/etc/bash.bashrc`: хук на приглашение, секреты
+#    обновляются по ходу работы;
+#  · неинтерактивный bash — задачи редактора (`/bin/bash -c …`), скрипты, команды агентов — файл из
+#    BASH_ENV. До активации он не доходит: `bash.bashrc` для него выходит в первой же строке, а
+#    приглашения, на котором сработал бы хук, нет. Ловилось живьём 2026-10-25: `dev.sh` задачей
+#    редактора падал без DATABASE_URL, в терминале работал.
 ENV FNOX_CONFIG_DIR=/workspaces/tree/.devbox/fnox \
-    FNOX_AGE_KEY_FILE=/home/node/.secrets/age.txt
+    FNOX_AGE_KEY_FILE=/home/node/.secrets/age.txt \
+    BASH_ENV=/etc/devbox/secrets.sh
 RUN echo 'command -v fnox >/dev/null 2>&1 && eval "$(fnox activate bash)"' >> /etc/bash.bashrc
+COPY etc/devbox/secrets.sh /etc/devbox/secrets.sh
 
 # Точки монтирования готовятся ЗДЕСЬ, и это не перестраховка: пустой том docker наполняет
 # содержимым и правами того каталога, на который его смонтировали. Каталога нет — том достаётся
